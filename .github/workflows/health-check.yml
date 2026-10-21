@@ -20,10 +20,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -45,6 +45,15 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.main
 
+      - name: Upload complete prospect review files
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: beliquid-prospect-review-${{ github.run_number }}
+          path: artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Record run summary
         if: always()
         env:
@@ -60,4 +69,9 @@ jobs:
             echo "- Job status: ${JOB_STATUS}"
             echo "- Python: 3.12"
             echo "- Discovery source: DEX Screener latest token profiles"
+            echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
+            echo "- Runtime health check: validates Python runtime only; its zero discovery counts are not batch totals"
+            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, pipeline-summary.json (artifact retention: 14 days)"
+            echo "- Qualification scores: withheld until criterion-level evidence is reviewed"
+            echo "- Automated outreach: disabled"
           } >> "$GITHUB_STEP_SUMMARY"
