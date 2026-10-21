@@ -6,6 +6,10 @@ Automated discovery, identity research, market-quality analysis, qualification, 
 
 **Foundation implemented; BeLiquid-specific qualification model is a proposed pilot baseline.** The workflow runs offline unit tests, discovers token profiles, enriches token names/symbols and market metrics from DEX Screener, emits structured summaries, and exports the complete batch as CSV/JSON GitHub Actions artifacts. The market research priority labels are also unvalidated pilot heuristics, not a lead score. The current six-criterion scorecard is a hypothesis to validate, not a BeLiquid-published or sales-validated model. Criteria remain unknown until criterion-specific evidence is reviewed, so scores are withheld. Market metrics are observations, not buying intent. Identity/security concerns must be routed independently of score. The system does not contact prospects.
 
+## Manual review procedure
+
+Use the [Evidence-Backed Reviewer Guide](docs/REVIEWER_GUIDE.md) for the exact six-criterion definitions, evidence/status rules, repeatable review-file examples, identity/risk holds, 60% coverage safeguards, and CSV/JSON reconciliation checklist. Review inputs are human-maintained; do not invent evidence or enable automated outreach.
+
 ## Run locally
 
 Requires Python 3.12 or later.
