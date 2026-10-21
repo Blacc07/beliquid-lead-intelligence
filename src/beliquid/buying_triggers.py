@@ -27,12 +27,12 @@ DEFAULT_REVIEWS_PATH = Path(__file__).resolve().parents[2] / "config" / "buying_
 
 
 def _validate_evidence(url: str | None, observed_at: str | None) -> None:
-    if not url or not url.strip():
+    if not isinstance(url, str) or not url.strip():
         raise ValueError("non-unknown buying trigger requires an evidence URL")
     parsed = urlparse(url.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("buying trigger evidence URL must be an absolute HTTP(S) URL")
-    if not observed_at or not observed_at.strip():
+    if not isinstance(observed_at, str) or not observed_at.strip():
         raise ValueError("non-unknown buying trigger requires an observation timestamp")
     try:
         parsed_time = datetime.fromisoformat(observed_at.strip().replace("Z", "+00:00"))
@@ -61,9 +61,13 @@ class BuyingTrigger:
             raise ValueError("buying trigger status must be unknown, inferred, or verified")
         if self.status != "unknown":
             _validate_evidence(self.evidence_url, self.observed_at)
-            if not self.summary or not self.summary.strip():
+            if not isinstance(self.summary, str) or not self.summary.strip():
                 raise ValueError("non-unknown buying trigger requires a concise summary")
-        if self.event_date:
+        elif self.evidence_url is not None or self.observed_at is not None:
+            _validate_evidence(self.evidence_url, self.observed_at)
+        if self.event_date is not None:
+            if not isinstance(self.event_date, str):
+                raise ValueError("event_date must be an ISO 8601 calendar date")
             try:
                 date.fromisoformat(self.event_date)
             except ValueError as exc:
@@ -71,6 +75,8 @@ class BuyingTrigger:
         for field_name in ("summary", "reviewer_note"):
             value = getattr(self, field_name)
             if value is not None:
+                if not isinstance(value, str):
+                    raise ValueError(f"{field_name} must be a string")
                 object.__setattr__(self, field_name, value.strip() or None)
 
     def to_dict(self) -> dict[str, str | None]:
