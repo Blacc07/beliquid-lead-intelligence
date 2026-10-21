@@ -122,13 +122,14 @@ def _classify_trigger(text: str) -> str | None:
 
 
 def _match_feed_payload(record: dict[str, Any], feed_url: str, feed: dict[str, Any], observed_at: str, reused_from_cache: bool = False, source_scope: str = "project_linked", provider: str | None = None) -> dict[str, Any]:
+    resolved_feed_url = feed.get("final_feed_url") or feed.get("feed_url") or feed_url
     base = {
         "cache_version": TRIGGER_CACHE_VERSION,
         "project_name": record.get("project_name", ""),
         "chain": record.get("chain", ""),
         "contract_address": record.get("contract_address", ""),
         "feed_url": feed_url,
-        "final_feed_url": feed.get("feed_url") or feed_url,
+        "final_feed_url": resolved_feed_url,
         "provider": provider or feed.get("provider") or "candidate project feed",
         "source_scope": source_scope,
         "observed_at": observed_at,
@@ -158,7 +159,7 @@ def _match_feed_payload(record: dict[str, Any], feed_url: str, feed: dict[str, A
         if not entry.get("published_at"):
             undated += 1
             continue
-        event_url = urljoin(feed.get("feed_url") or feed_url, str(entry.get("url") or ""))
+        event_url = urljoin(resolved_feed_url, str(entry.get("url") or ""))
         parsed_url = urlparse(event_url)
         if parsed_url.scheme not in {"http", "https"} or not parsed_url.netloc:
             continue
@@ -168,7 +169,7 @@ def _match_feed_payload(record: dict[str, Any], feed_url: str, feed: dict[str, A
             "title": title[:500],
             "summary_excerpt": summary[:1000],
             "event_url": event_url,
-            "feed_url": feed.get("feed_url") or feed_url,
+            "feed_url": resolved_feed_url,
             "provider": provider or feed.get("provider") or "candidate project feed",
             "source_scope": source_scope,
             "published_at": entry.get("published_at"),
