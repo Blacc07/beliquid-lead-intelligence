@@ -22,6 +22,7 @@ LOGGER = logging.getLogger(__name__)
 API_ROOT = "https://api.gopluslabs.io/api/v1/token_security"
 RUGCHECK_API_ROOT = "https://api.rugcheck.xyz/v1/tokens"
 MAX_WORKERS = 6
+SECURITY_CACHE_VERSION = 2
 USER_AGENT = "BeLiquid-Lead-Intelligence/0.1 (+https://github.com/Blacc07/beliquid-lead-intelligence)"
 TIMEOUT_SECONDS = 8
 MAX_RESPONSE_BYTES = 1_000_000
@@ -116,7 +117,7 @@ def research_solana_security(record: dict[str, Any], observed_at: str, requester
     url = f"{RUGCHECK_API_ROOT}/{quote(address, safe='')}/report" if address else None
     result: dict[str, Any] = {
         "project_name": record.get("project_name", ""), "chain": record.get("chain", ""),
-        "contract_address": record.get("contract_address", ""), "provider": "RugCheck Solana Token Report",
+        "contract_address": record.get("contract_address", ""), "provider": "RugCheck Solana Token Report", "cache_version": SECURITY_CACHE_VERSION,
         "provider_url": url, "observed_at": observed_at, "fetch_status": "not_attempted",
         "provider_report_status": "unknown", "risk_status": "unknown", "findings": [],
         "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "unknown", "evidence_url": None, "observed_at": None},
@@ -189,7 +190,7 @@ def research_security(record: dict[str, Any], observed_at: str, requester: Calla
         "project_name": record.get("project_name", ""),
         "chain": record.get("chain", ""),
         "contract_address": record.get("contract_address", ""),
-        "provider": "GoPlus Token Security API",
+        "provider": "GoPlus Token Security API", "cache_version": SECURITY_CACHE_VERSION,
         "provider_url": None,
         "observed_at": observed_at,
         "fetch_status": "not_attempted",
@@ -283,7 +284,7 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
         canonical = record.get("identity_risk") or {}
         explicit_clear = canonical.get("identity_status") == "verified" and canonical.get("risk_status") == "clear"
         prior_concern = bool(prior and prior.get("risk_status") == "concern" and not explicit_clear)
-        if prior and prior.get("fetch_status") in {"success", "no_report"} and _security_cache_fresh(prior.get("observed_at"), cache_ttl_hours, now) and not (prior.get("risk_status") == "concern" and explicit_clear):
+        if prior and prior.get("cache_version") == SECURITY_CACHE_VERSION and prior.get("fetch_status") in {"success", "no_report"} and _security_cache_fresh(prior.get("observed_at"), cache_ttl_hours, now) and not (prior.get("risk_status") == "concern" and explicit_clear):
             item = dict(prior)
             item["reused_from_cache"] = True
             results.append(item)
@@ -308,6 +309,7 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
     return {
         "schema_version": 1,
         "source": "GoPlus (configured EVM chains) and RugCheck (Solana)",
+        "cache_version": SECURITY_CACHE_VERSION,
         "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
         "records_reused_from_cache": reused,
         "historical_concerns_retained": historical_retained,
