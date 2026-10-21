@@ -2,6 +2,15 @@ name: BeLiquid Pipeline Health Check
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'config/**'
+      - 'docs/**'
+      - 'README.md'
+      - '.github/workflows/health-check.yml'
   push:
     branches: [main]
     paths:
