@@ -175,14 +175,32 @@ def research_feed(record: dict[str, Any], feed_url: str, observed_at: str, fetch
     return base
 
 
-def collect_trigger_research(prospect_payload: dict[str, Any], public_research: dict[str, Any], observed_at: str | None = None, fetcher=fetch_feed) -> dict[str, Any]:
+
+def _within_cache_ttl(observed_at: Any, ttl_hours: float, now: datetime) -> bool:
+    if not isinstance(observed_at, str):
+        return False
+    try:
+        stamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if stamp.tzinfo is None or stamp.utcoffset() is None:
+        return False
+    age = (now - stamp.astimezone(timezone.utc)).total_seconds()
+    return 0 <= age <= ttl_hours * 3600
+
+
+def collect_trigger_research(prospect_payload: dict[str, Any], public_research: dict[str, Any], observed_at: str | None = None, fetcher=fetch_feed, previous_payload: dict[str, Any] | None = None, cache_ttl_hours: float = 24) -> dict[str, Any]:
     prospects = prospect_payload.get("records")
     public_records = public_research.get("records")
     if not isinstance(prospects, list) or not isinstance(public_records, list):
         raise ValueError("prospect and public research inputs must contain records lists")
     timestamp = observed_at or datetime.now(timezone.utc).isoformat()
+    now = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+    prior_records = previous_payload.get("records", []) if isinstance(previous_payload, dict) else []
+    prior_by_key = {f"{str(item.get('chain') or '').casefold()}:{str(item.get('contract_address') or '').casefold()}": item for item in prior_records if isinstance(item, dict)}
     prospect_map = {f"{str(r.get('chain') or '').casefold()}:{str(r.get('contract_address') or '').casefold()}": r for r in prospects if isinstance(r, dict)}
     jobs = []
+    cached_results = []
     for public in public_records:
         if not isinstance(public, dict):
             continue
@@ -191,13 +209,24 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
         if not prospect:
             continue
         feeds = public.get("feed_candidates") or []
+        prior = prior_by_key.get(key, {})
+        prior_feeds = {item.get("feed_url"): item for item in prior.get("feed_results", []) if isinstance(item, dict)}
         for feed in feeds[:MAX_FEEDS_PER_PROSPECT]:
-            if isinstance(feed, dict) and isinstance(feed.get("url"), str):
+            if not isinstance(feed, dict) or not isinstance(feed.get("url"), str):
+                continue
+            cached = prior_feeds.get(feed["url"])
+            if cached and cached.get("fetch_status") == "success" and _within_cache_ttl(cached.get("observed_at"), cache_ttl_hours, now):
+                item = dict(cached)
+                item["reused_from_cache"] = True
+                cached_results.append(item)
+            else:
                 jobs.append((prospect, feed["url"]))
     def run(job):
-        return research_feed(job[0], job[1], timestamp, fetcher)
+        item = research_feed(job[0], job[1], timestamp, fetcher)
+        item["reused_from_cache"] = False
+        return item
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        feed_results = list(pool.map(run, jobs))
+        feed_results = cached_results + list(pool.map(run, jobs))
     grouped: dict[str, list[dict[str, Any]]] = {}
     for result in feed_results:
         key = f"{str(result.get('chain') or '').casefold()}:{str(result.get('contract_address') or '').casefold()}"
@@ -227,6 +256,8 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
         "feeds_attempted": len(feed_results),
         "feeds_succeeded": sum(item["fetch_status"] == "success" for item in feed_results),
         "feeds_failed": sum(item["fetch_status"] == "fetch_failed" for item in feed_results),
+        "feeds_reused_from_cache": sum(bool(item.get("reused_from_cache")) for item in feed_results),
+        "cache_ttl_hours": cache_ttl_hours,
         "trigger_candidates": sum(len(item["trigger_candidates"]) for item in feed_results),
         "verified_triggers_created": 0,
         "canonical_buying_trigger_reviews_changed": False,
@@ -236,10 +267,11 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
     }
 
 
-def write_trigger_research(prospect_path: Path, public_path: Path, output_path: Path) -> dict[str, Any]:
+def write_trigger_research(prospect_path: Path, public_path: Path, output_path: Path, previous_path: Path | None = None, cache_ttl_hours: float = 24) -> dict[str, Any]:
     prospect = json.loads(prospect_path.read_text(encoding="utf-8"))
     public = json.loads(public_path.read_text(encoding="utf-8"))
-    result = collect_trigger_research(prospect, public)
+    previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path and previous_path.is_file() else None
+    result = collect_trigger_research(prospect, public, previous_payload=previous, cache_ttl_hours=cache_ttl_hours)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return {key: result[key] for key in ("records_exported", "feeds_attempted", "feeds_succeeded", "feeds_failed", "trigger_candidates", "outreach_enabled")}
@@ -250,9 +282,11 @@ def main() -> int:
     parser.add_argument("--input", type=Path, default=Path("artifacts/prospect-review.json"))
     parser.add_argument("--public-research", type=Path, default=Path("artifacts/automated-research.json"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/trigger-research.json"))
+    parser.add_argument("--previous", type=Path, default=Path(".cache/research-state/trigger-research.json"))
+    parser.add_argument("--cache-ttl-hours", type=float, default=24)
     args = parser.parse_args()
     try:
-        print(json.dumps(write_trigger_research(args.input, args.public_research, args.output), indent=2))
+        print(json.dumps(write_trigger_research(args.input, args.public_research, args.output, args.previous, args.cache_ttl_hours), indent=2))
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(json.dumps({"status": "failure", "error": str(exc)}, indent=2))
         return 1
