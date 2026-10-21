@@ -19,6 +19,11 @@ from beliquid.buying_triggers import (
 from beliquid.models import ProspectRecord
 from beliquid.market_priority import prioritize_market_research
 from beliquid.qualification import load_criteria_config, qualify_discovered_record
+from beliquid.criterion_reviews import (
+    assessments_for_prospect,
+    load_criterion_reviews,
+    DEFAULT_REVIEWS_PATH as DEFAULT_CRITERION_REVIEWS_PATH,
+)
 
 
 def _record_dict(
@@ -26,8 +31,10 @@ def _record_dict(
     config: dict[str, Any],
     identity_risk_reviews: dict[str, Any],
     buying_trigger_reviews: dict[str, Any],
+    criterion_reviews: dict[str, Any],
 ) -> dict[str, Any]:
-    qualification = qualify_discovered_record(record, config)
+    reviewed_criteria = assessments_for_prospect(record.chain, record.contract_address, criterion_reviews)
+    qualification = qualify_discovered_record(record, config, reviewed_criteria)
     identity_risk = assessment_for_prospect(record.chain, record.contract_address, identity_risk_reviews)
     buying_triggers = trigger_assessment_for_prospect(record.chain, record.contract_address, buying_trigger_reviews)
     market_research_priority = prioritize_market_research(dict(record.metrics))
@@ -74,14 +81,19 @@ def write_review_exports(
     output_dir: str | Path = "artifacts",
     identity_risk_reviews_path: str | Path = DEFAULT_REVIEWS_PATH,
     buying_trigger_reviews_path: str | Path = DEFAULT_TRIGGER_REVIEWS_PATH,
+    criterion_reviews_path: str | Path = DEFAULT_CRITERION_REVIEWS_PATH,
 ) -> dict[str, str]:
-    """Write full-batch exports with reviewer-managed identity, risk, and trigger findings."""
+    """Write full-batch exports with reviewer-managed criterion, identity, risk, and trigger findings."""
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     config = load_criteria_config()
     identity_risk_reviews = load_identity_risk_reviews(Path(identity_risk_reviews_path))
     buying_trigger_reviews = load_buying_trigger_reviews(Path(buying_trigger_reviews_path))
-    rows = [_record_dict(record, config, identity_risk_reviews, buying_trigger_reviews) for record in records]
+    criterion_reviews = load_criterion_reviews(Path(criterion_reviews_path), config)
+    rows = [
+        _record_dict(record, config, identity_risk_reviews, buying_trigger_reviews, criterion_reviews)
+        for record in records
+    ]
 
     route_counts: dict[str, int] = {}
     for row in rows:
@@ -132,24 +144,40 @@ def write_review_exports(
     }
     summary["buying_triggers"] = buying_trigger_summary
 
+    criterion_review_summary = {
+        "review_records_loaded": len(criterion_reviews),
+        "prospects_exported": len(rows),
+        "prospects_with_any_criterion_review": sum(
+            any(item["status"] != "unknown" for item in row["qualification"]["criteria"])
+            for row in rows
+        ),
+        "scores_issued": sum(row["qualification"]["score_percent"] is not None for row in rows),
+        "scores_withheld": sum(row["qualification"]["score_percent"] is None for row in rows),
+        "minimum_evidence_coverage_percent": config["minimum_evidence_coverage_percent"],
+    }
+    summary["criterion_reviews"] = criterion_review_summary
+
     json_path = destination / "prospect-review.json"
     csv_path = destination / "prospect-review.csv"
     batch_path = destination / "pipeline-summary.json"
     json_payload = {
-        "schema_version": 5,
+        "schema_version": 6,
         "source": "DEX Screener",
         "records_exported": len(rows),
         "qualification_summary": summary.get("qualification", {}),
         "identity_risk_summary": identity_risk_summary,
         "market_research_priority_summary": market_priority_summary,
         "buying_trigger_summary": buying_trigger_summary,
+        "criterion_review_summary": criterion_review_summary,
         "records": rows,
         "important_note": (
             "Research-only export. Market priority is an unvalidated research heuristic, not a lead score. "
             "Criterion findings remain unknown until criterion-specific evidence is reviewed. Identity/risk findings are loaded from config/identity_risk_reviews.json; "
             "adverse identity or risk findings route to manual_hold. Buying triggers are human-reviewed records from "
             "config/buying_trigger_reviews.json; trigger labels do not automatically alter scores or identity/risk routes. "
-            "Market metrics alone do not verify buying intent. No outreach is enabled."
+            "Market metrics alone do not verify buying intent. Criterion scores use only the reviewer-managed "
+            "config/criterion_reviews.json assessments and remain withheld below the evidence-coverage threshold. "
+            "No outreach is enabled."
         ),
     }
     json_path.write_text(json.dumps(json_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -228,11 +256,15 @@ def write_review_exports(
                 "identity_risk_reviewer_note": identity_risk["reviewer_note"] or "",
             })
             csv_row.update({f"{key}_status": statuses.get(key, "unknown") for key in criterion_keys})
+            reviewed_criteria = assessments_for_prospect(
+                row["chain"], row["contract_address"], criterion_reviews
+            )
             for key in criterion_keys:
-                csv_row[f"review_{key}_status"] = "unknown"
-                csv_row[f"review_{key}_evidence_url"] = ""
-                csv_row[f"review_{key}_observed_at"] = ""
-                csv_row[f"review_{key}_reviewer_note"] = ""
+                review = reviewed_criteria.get(key, {})
+                csv_row[f"review_{key}_status"] = review.get("status", "unknown")
+                csv_row[f"review_{key}_evidence_url"] = ";".join(review.get("evidence_urls", []))
+                csv_row[f"review_{key}_observed_at"] = ";".join(review.get("evidence_timestamps", []))
+                csv_row[f"review_{key}_reviewer_note"] = review.get("note") or ""
             csv_row.update({
                 "score_percent": qualification["score_percent"],
                 "score_status": qualification["score_status"],
