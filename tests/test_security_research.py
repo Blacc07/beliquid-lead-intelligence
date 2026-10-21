@@ -107,6 +107,16 @@ class SecurityResearchTests(unittest.TestCase):
         self.assertEqual(current["records"][0]["risk_status"], "no_high_risk_flag_detected_by_provider")
         self.assertFalse(current["records"][0].get("reused_from_cache", False))
 
+    def test_cache_version_change_forces_security_refresh(self):
+        row = {"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"}
+        payload = {"mint": "So111", "riskLevel": "Good", "risks": []}
+        previous = collect_security({"records": [row]}, "2026-10-21T10:00:00Z", lambda url: payload)
+        previous["records"][0]["cache_version"] = 1
+        current = collect_security({"records": [row]}, "2026-10-21T11:00:00Z", lambda url: payload,
+                                   previous_payload=previous, cache_ttl_hours=24)
+        self.assertEqual(current["records_fetched_this_run"], 1)
+        self.assertFalse(current["records"][0]["reused_from_cache"])
+
     def test_batch_preserves_outreach_disabled(self):
         result = collect_security({"records": [{"project_name": "X", "chain": "unsupported", "contract_address": "0xabc"}]},
                                   "2026-10-21T12:00:00Z")
