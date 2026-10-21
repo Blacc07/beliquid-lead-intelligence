@@ -283,7 +283,7 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
         canonical = record.get("identity_risk") or {}
         explicit_clear = canonical.get("identity_status") == "verified" and canonical.get("risk_status") == "clear"
         prior_concern = bool(prior and prior.get("risk_status") == "concern" and not explicit_clear)
-        if prior and prior.get("fetch_status") in {"success", "no_report"} and _security_cache_fresh(prior.get("observed_at"), cache_ttl_hours, now) and not (prior_concern and prior.get("risk_status") != "concern"):
+        if prior and prior.get("fetch_status") in {"success", "no_report"} and _security_cache_fresh(prior.get("observed_at"), cache_ttl_hours, now) and not (prior.get("risk_status") == "concern" and explicit_clear):
             item = dict(prior)
             item["reused_from_cache"] = True
             results.append(item)
