@@ -38,7 +38,7 @@ class CriterionReviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "reviews.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "requires evidence"):
+            with self.assertRaisesRegex(ValueError, "require evidence"):
                 load_criterion_reviews(path, load_criteria_config())
 
     def test_not_present_requires_evidence(self):
@@ -46,7 +46,7 @@ class CriterionReviewTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "reviews.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "requires evidence"):
+            with self.assertRaisesRegex(ValueError, "require evidence"):
                 load_criterion_reviews(path, load_criteria_config())
 
     def test_timezone_required(self):
