@@ -166,7 +166,25 @@ class ReviewExportTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
             self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_status"], "confirmed")
             self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_evidence_url"], URL)
+            self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_observed_at"], TIMESTAMP)
             self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_reviewer_note"], "Reviewed market-quality evidence")
+            # Reconcile the reviewed criterion data and qualification outcome across JSON and CSV.
+            self.assertEqual(rows[0]["chain"], first["chain"])
+            self.assertEqual(rows[0]["contract_address"], first["contract_address"])
+            self.assertEqual(rows[0]["action_route"], first["action_route"])
+            self.assertEqual(rows[0]["score_status"], first["qualification"]["score_status"])
+            self.assertEqual(float(rows[0]["evidence_coverage_percent"]), first["qualification"]["evidence_coverage_percent"])
+            self.assertEqual(rows[0]["score_percent"], "")
+            self.assertEqual(first["qualification"]["criteria"][0]["evidence_urls"], [URL])
+            self.assertEqual(first["qualification"]["criteria"][0]["evidence_timestamps"], [TIMESTAMP])
+            self.assertEqual(rows[0]["service_fit_and_demonstrated_need_status"], first["qualification"]["criteria"][0]["status"])
+            self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_status"], first["qualification"]["criteria"][0]["status"])
+            self.assertEqual(rows[0]["market_activity_and_commercial_potential_status"], first["qualification"]["criteria"][1]["status"])
+            self.assertEqual(rows[0]["review_market_activity_and_commercial_potential_status"], first["qualification"]["criteria"][1]["status"])
+            self.assertEqual(rows[0]["identity_status"], first["identity_risk"]["identity_status"])
+            self.assertEqual(rows[0]["risk_status"], first["identity_risk"]["risk_status"])
+            self.assertEqual(rows[0]["buying_trigger_status"], first["buying_triggers"]["status"])
+            self.assertFalse(first["qualification"]["outreach_enabled"])
 
     def test_malformed_criterion_review_fails_export_closed(self):
         with tempfile.TemporaryDirectory() as directory:
