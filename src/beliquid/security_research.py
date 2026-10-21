@@ -7,6 +7,7 @@ reviews, qualification scores, dispositions, or outreach settings.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 import logging
@@ -14,11 +15,13 @@ from pathlib import Path
 import time
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 LOGGER = logging.getLogger(__name__)
 API_ROOT = "https://api.gopluslabs.io/api/v1/token_security"
+RUGCHECK_API_ROOT = "https://api.rugcheck.xyz/v1/tokens"
+MAX_WORKERS = 6
 USER_AGENT = "BeLiquid-Lead-Intelligence/0.1 (+https://github.com/Blacc07/beliquid-lead-intelligence)"
 TIMEOUT_SECONDS = 8
 MAX_RESPONSE_BYTES = 1_000_000
@@ -85,6 +88,91 @@ def fetch_token_security(chain_id: str, address: str, requester: Callable[[str],
     raise RuntimeError("GoPlus request ended without a response")
 
 
+
+def fetch_token_report(url: str, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
+    """Fetch a RugCheck report with bounded retries for transient failures."""
+    last_error: Exception | None = None
+    for attempt in range(MAX_ATTEMPTS):
+        try:
+            return requester(url)
+        except HTTPError as exc:
+            last_error = exc
+            if exc.code == 404 or exc.code not in {408, 425, 429, 500, 502, 503, 504} or attempt == MAX_ATTEMPTS - 1:
+                raise
+        except (URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt == MAX_ATTEMPTS - 1:
+                raise
+        if attempt < MAX_ATTEMPTS - 1:
+            time.sleep(0.25 * (2 ** attempt))
+    if last_error:
+        raise last_error
+    raise RuntimeError("RugCheck request ended without a response")
+
+
+def research_solana_security(record: dict[str, Any], observed_at: str, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
+    """Fetch a source-scoped RugCheck report for a Solana mint."""
+    address = str(record.get("contract_address") or "").strip()
+    url = f"{RUGCHECK_API_ROOT}/{quote(address, safe='')}/report" if address else None
+    result: dict[str, Any] = {
+        "project_name": record.get("project_name", ""), "chain": record.get("chain", ""),
+        "contract_address": record.get("contract_address", ""), "provider": "RugCheck Solana Token Report",
+        "provider_url": url, "observed_at": observed_at, "fetch_status": "not_attempted",
+        "provider_report_status": "unknown", "risk_status": "unknown", "findings": [],
+        "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "unknown", "evidence_url": None, "observed_at": None},
+        "outreach_enabled": False,
+    }
+    if not address:
+        result.update(fetch_status="missing_contract_address", research_note="No Solana mint address supplied; risk remains unknown.")
+        return result
+    try:
+        payload = fetch_token_report(url, requester)
+    except HTTPError as exc:
+        if exc.code == 404:
+            result.update(fetch_status="no_report", provider_report_status="not_found", research_note="RugCheck returned no report; this is not evidence of safety.")
+        else:
+            result.update(fetch_status="fetch_failed", research_note=f"RugCheck request failed (HTTP {exc.code}); risk remains unknown.")
+        return result
+    except (URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
+        result.update(fetch_status="fetch_failed", research_note=f"RugCheck request failed ({type(exc).__name__}); risk remains unknown.")
+        return result
+    report = payload.get("result") or payload.get("data") or payload
+    if not isinstance(report, dict) or not report or not any(k in report for k in ("risks", "riskLevel", "risk_level", "token", "tokenMeta", "score")):
+        result.update(fetch_status="no_report", provider_report_status="not_found", research_note="RugCheck returned no recognizable token report; this is not evidence of safety.")
+        return result
+    level = str(report.get("riskLevel") or report.get("risk_level") or "").strip().casefold()
+    high_levels = {"danger", "dangerous", "critical", "scam", "risky", "high", "severe"}
+    findings = []
+    if report.get("rugged") is True:
+        findings.append({"field": "rugged", "value": "true", "severity": "high", "description": "RugCheck reports the token as rugged"})
+    if level in high_levels:
+        findings.append({"field": "riskLevel", "value": level, "severity": "high", "description": "RugCheck reports a high-risk token classification"})
+    risks = report.get("risks", [])
+    if isinstance(risks, list):
+        for item in risks:
+            if not isinstance(item, dict):
+                continue
+            item_level = str(item.get("level") or item.get("severity") or "").strip().casefold()
+            if item_level in high_levels:
+                findings.append({"field": "risk_item", "value": str(item.get("name") or "provider risk item")[:300], "severity": "high", "description": str(item.get("description") or item.get("name") or "RugCheck high-severity risk item")[:1000]})
+            elif item.get("name") or item.get("description"):
+                findings.append({"field": "risk_item", "value": str(item.get("name") or item.get("description"))[:300], "severity": "review", "description": str(item.get("description") or item.get("name"))[:1000]})
+    token = report.get("token") if isinstance(report.get("token"), dict) else {}
+    for field, label in (("mintAuthority", "mint authority remains configured"), ("freezeAuthority", "freeze authority remains configured")):
+        if token.get(field):
+            findings.append({"field": field, "value": str(token[field])[:300], "severity": "review", "description": label})
+    concern = any(item["severity"] == "high" for item in findings)
+    result.update({
+        "fetch_status": "success", "provider_report_status": "found",
+        "risk_status": "concern" if concern else "no_high_risk_flag_detected_by_provider",
+        "findings": findings, "provider_risk_level": report.get("riskLevel") or report.get("risk_level"),
+        "provider_risk_score": report.get("score_normalised", report.get("score_normalized", report.get("score"))),
+        "report_fields_present": sorted(str(key) for key in report.keys()),
+        "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "candidate_only", "source_scoped_risk_status": "concern" if concern else "no_high_risk_flag_detected_by_provider", "evidence_url": url, "observed_at": observed_at, "note": "A single Solana security report is not a complete security or reputational assessment."},
+        "research_note": "RugCheck findings are source-scoped observations, not a global safety guarantee.",
+    })
+    return result
+
 def research_security(record: dict[str, Any], observed_at: str, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
     chain = str(record.get("chain") or "").strip().casefold()
     address = str(record.get("contract_address") or "").strip()
@@ -102,6 +190,8 @@ def research_security(record: dict[str, Any], observed_at: str, requester: Calla
         "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "unknown", "evidence_url": None, "observed_at": None},
         "outreach_enabled": False,
     }
+    if chain in {"solana", "sol"}:
+        return research_solana_security(record, observed_at, requester)
     chain_id = CHAIN_IDS.get(chain)
     if not chain_id:
         result.update(fetch_status="unsupported_chain", research_note="No configured GoPlus chain mapping; risk remains unknown.")
@@ -159,11 +249,12 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
     if not isinstance(records, list):
         raise ValueError("prospect-review input must contain a records list")
     timestamp = observed_at or datetime.now(timezone.utc).isoformat()
-    results = [research_security(record, timestamp, requester) for record in records]
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        results = list(pool.map(lambda record: research_security(record, timestamp, requester), records))
     return {
         "schema_version": 1,
-        "source": "GoPlus Token Security API",
-        "source_coverage": {"supported_chain_names": sorted(CHAIN_IDS), "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS},
+        "source": "GoPlus (configured EVM chains) and RugCheck (Solana)",
+        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS},
         "records_exported": len(results),
         "records_with_reports": sum(item["fetch_status"] == "success" for item in results),
         "records_with_high_risk_flags": sum(item["risk_status"] == "concern" for item in results),
