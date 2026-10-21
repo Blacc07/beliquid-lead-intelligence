@@ -1,12 +1,20 @@
 # BeLiquid Lead Intelligence
 
-Automated discovery, identity research, market-quality analysis, qualification, and human-reviewed business-development routing for BeLiquid Agency's crypto market-making and liquidity services.
+Automated discovery, market-data enrichment, public-page and linked-feed research, contract-security observations, source-backed task progression, and conservative qualification routing for BeLiquid Agency's crypto market-making and liquidity services.
 
 ## Current status
 
 **Foundation implemented; BeLiquid-specific qualification model is a proposed pilot baseline.** The workflow runs offline unit tests, discovers token profiles, enriches token names/symbols and market metrics from DEX Screener, emits structured summaries, and exports the complete batch as CSV/JSON GitHub Actions artifacts. The market research priority labels are also unvalidated pilot heuristics, not a lead score. The current six-criterion scorecard is a hypothesis to validate, not a BeLiquid-published or sales-validated model. Criteria remain unknown until criterion-specific evidence is reviewed, so scores are withheld. Market metrics are observations, not buying intent. Identity/security concerns must be routed independently of score. The system does not contact prospects.
 
-## Manual review procedure
+## Automated public-page research
+
+The workflow fetches candidate project homepages from the existing DEX Screener profile metadata and writes `automated-research.json`. It captures page metadata, outbound source candidates, and keyword-based buying-trigger/criterion evidence candidates. These are research leads only: they do not automatically verify identity, clear risk, confirm buying intent, or change the six-criterion score. The output is covered by the audit manifest. Pages are fetched with bounded size/time and public-HTTP URL checks; failures remain explicit and statuses stay unknown. This is the first evidence-collection adapter, not yet a complete autonomous evidence system for official identity, independent risk intelligence, buying triggers, or all six criteria.
+
+## Automated research source coverage
+
+The workflow also runs GoPlus contract-security checks for configured EVM chains and RugCheck reports for Solana, discovers RSS/Atom feeds linked by candidate project pages and scans public CoinDesk/Cointelegraph RSS feeds, records dated buying-trigger candidates, and generates a run-local task ledger from source calls that actually completed. High-severity contract flags route the research queue to an automated hold. Clean or missing security reports never establish global safety; trigger candidates remain unverified, canonical identity/risk and trigger reviews are not silently rewritten, scores still use the existing six criteria and 60% evidence-coverage threshold, and outreach remains disabled. Successful source outputs are cached for 24 hours to reduce repeated requests, and prior high-severity security concerns remain held across clean or unavailable refreshes unless an explicit evidence-backed canonical clearance is present. The cache is best-effort, not a durable database. See [Automated Research Source Coverage](docs/AUTOMATED_RESEARCH_SOURCES.md) for rate bounds, failure semantics, credentials, and limitations.
+
+## Review procedure
 
 Use the [Evidence-Backed Reviewer Guide](docs/REVIEWER_GUIDE.md) for the exact six-criterion definitions, evidence/status rules, repeatable review-file examples, identity/risk holds, 60% coverage safeguards, and CSV/JSON reconciliation checklist. Review inputs are human-maintained; do not invent evidence or enable automated outreach.
 
@@ -29,7 +37,7 @@ The discovery command makes one live HTTP request. The enrichment command fetche
 2. Select **BeLiquid Pipeline Health Check**.
 3. Choose **Run workflow** to execute it manually.
 4. Review the unit-test output, discovery/enrichment summary, and runtime health summary.
-5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv`, `prospect-review.json`, and `pipeline-summary.json`. The CSV includes reviewer status, evidence URL, observed timestamp, and reviewer-note columns for each criterion; those fields start as unknown/blank and do not affect scoring automatically. Buying-trigger observations from `config/buying_trigger_reviews.json` are also exported with their evidence URL, observation timestamp, optional event date, and verified/inferred/unknown status. Criterion assessments from `config/criterion_reviews.json` can be recorded as confirmed/not_present/unknown with matching evidence URLs and timezone-aware timestamps. Only criterion assessments count toward qualification coverage; trigger records do not automatically confirm criteria. Artifacts are retained for 14 days.
+5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv`, `prospect-review.json`, `pipeline-summary.json`, `automated-research.json`, `security-research.json`, `trigger-research.json`, `criterion-evidence.json`, `research-task-ledger.json`, `research-queue.csv`, `research-queue.json`, pilot-validation reports, and the SHA-256 audit manifest. The CSV includes reviewer status, evidence URL, observed timestamp, and reviewer-note columns for each criterion; those fields start as unknown/blank and do not affect scoring automatically. Buying-trigger observations from `config/buying_trigger_reviews.json` are also exported with their evidence URL, observation timestamp, optional event date, and verified/inferred/unknown status. Criterion assessments from `config/criterion_reviews.json` can be recorded as confirmed/not_present/unknown with matching evidence URLs and timezone-aware timestamps. Only criterion assessments count toward qualification coverage; trigger records do not automatically confirm criteria. Artifacts are retained for 14 days.
 
 The workflow is scheduled daily at 08:00 UTC. Scheduled jobs can be delayed. Usage limits depend on the repository's plan, runner type, and GitHub's current policies; public visibility does not guarantee unlimited use of every runner type.
 
@@ -53,7 +61,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 1. **Discover:** collect token/project candidates from supported public sources and preserve source timestamps.
 2. **Verify identity and risk:** cross-check chain, contract, official domain, and credible project references; hold conflicting identities.
 3. **Diagnose market quality:** measure liquidity separately from volume. Add spread, order-book depth, slippage, cross-venue divergence, and time-series analysis only when suitable source data is available.
-4. **Review buying triggers:** add human-reviewed, dated event evidence in `config/buying_trigger_reviews.json`. Supported types include exchange listings, new trading pairs, TGE/launch, venue expansion, documented liquidity issues, milestones/campaigns, and token unlocks. Verified/inferred entries require an HTTP(S) source URL, timezone-aware observation timestamp, and summary. This component validates and exports reviewer input; it does not crawl news or treat market metrics as buying intent.
+4. **Research buying triggers:** collect dated candidate events from RSS/Atom feeds linked by candidate project pages plus public CoinDesk and Cointelegraph RSS feeds. The adapter matches project metadata against dated feed entries for listings, launches, partnerships/fundraising, venue expansion, liquidity issues, milestones/campaigns, and unlocks. These remain candidate-only until corroborated; canonical trigger reviews remain separate and market metrics are not buying intent.
 5. **Review criteria, score, and route:** enter criterion-specific assessments in `config/criterion_reviews.json`. Confirmed/not_present findings require evidence URLs and timezone-aware timestamps. Scores remain withheld until the configured 60% evidence-coverage threshold is reached. Buying-trigger evidence does not automatically confirm a criterion; keep data completeness and identity/risk flags separate.
 6. **Prepare outreach drafts:** generate evidence-backed service angles and discovery questions for human review. Sending remains disabled.
 
@@ -77,7 +85,11 @@ These weights are a starting hypothesis supplied for this project. They must be 
 - `config/qualification_criteria.json` — proposed BeLiquid-specific weights, evidence definitions, trigger labels, and routes.
 - `src/beliquid/scoring.py` — evidence-backed score primitives; unknowns and review flags are handled conservatively.
 - `src/beliquid/review_export.py` — full-batch CSV/JSON review artifacts.
-- `src/beliquid/buying_triggers.py` — validates human-reviewed buying-trigger observations.
+- `src/beliquid/buying_triggers.py` — validates canonical buying-trigger observations.
+- `src/beliquid/automated_research.py` — bounded candidate homepage collection and feed discovery.
+- `src/beliquid/security_research.py` — GoPlus EVM and RugCheck Solana contract-risk observations with retry handling.
+- `src/beliquid/trigger_research.py` — dated RSS/Atom trigger candidates.
+- `src/beliquid/task_ledger.py` — source-backed automated task completion ledger.
 - `src/beliquid/criterion_reviews.py` — validates reviewer assessments against configured criteria.
 - `tests/` — offline tests for models, sources, scoring, qualification, and exports.
 
@@ -96,7 +108,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 1. Verify complete-batch exports and the revised configuration in GitHub Actions.
 2. Add contract/project identity verification and independent security/manual-hold routing.
 3. Add supported market-quality measurements with provenance and clear limitations.
-4. Add externally sourced buying-trigger discovery and source-specific adapters; the current component validates and exports human-reviewed trigger evidence only.
+4. Expand authoritative buying-trigger coverage beyond feeds linked by candidate project pages and corroborate dated event candidates.
 5. Add reviewed criterion assessments and action recommendations.
 6. Validate the proposed scoring model against a manually reviewed pilot batch.
 7. Later, add persistence and human-approved outreach drafts.

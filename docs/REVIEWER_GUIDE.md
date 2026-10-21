@@ -132,3 +132,14 @@ The record-level queue uses these process labels:
 ## Audit record checklist
 
 For each reviewed batch, retain (in an approved location) the Actions run URL/number, original artifact, review-file version/commit, reviewer and review date in your internal log, evidence URLs, observation timestamps, rationale/scope notes, unresolved flags, CSV/JSON reconciliation outcome, and the human decision/approver. Current JSON review schemas capture evidence and notes but do not have dedicated reviewer-identity or review-completed-at fields; record those in the separate review log until that schema is deliberately extended.
+
+
+## Research task completion ledger
+
+The queue generator reads `config/research_task_reviews.json`. This file tracks the completion of research tasks separately from the underlying identity/risk and qualification review files. It is not a source of truth for prospect status.
+
+Each completion is keyed by the prospect's `chain:contract_address`, then by a task name. Copy the current prospect's `input_fingerprint` from `research-queue.json`; record `status: "completed"`, reviewer identifier, timezone-aware `completed_at`, outcome (`completed`, `inconclusive`, `blocked`, or `needs_follow_up`), evidence URLs, and matching timezone-aware observation timestamps. The validator rejects malformed records and ledger entries for prospects outside the current batch.
+
+A completion is effective only while its fingerprint matches the exact current prospect-review record. A changed record reopens the relevant task rather than silently reusing stale research. Regenerate the queue after changing the canonical review inputs. Keep the original evidence and review trail in an approved store.
+
+**Safeguard:** task completion never verifies identity, clears risk, confirms a buying trigger, completes criterion evidence, or authorizes outreach. If identity/risk research is marked complete but either canonical status remains unresolved, the next queue item is `escalate_unresolved_identity_risk`; commercial research remains blocked. Manual holds always override completion records. If criterion work is marked complete but the score is still withheld, the queue requests human follow-up rather than implying readiness.

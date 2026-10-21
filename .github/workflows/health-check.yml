@@ -2,6 +2,15 @@ name: BeLiquid Pipeline Health Check
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'config/**'
+      - 'docs/**'
+      - 'README.md'
+      - '.github/workflows/health-check.yml'
   push:
     branches: [main]
     paths:
@@ -36,6 +45,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore recent research state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/research-state
+          key: beliquid-research-state-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            beliquid-research-state-${{ github.ref_name }}-
+
       - name: Verify Python version
         run: python --version
 
@@ -54,6 +71,36 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.main
 
+      - name: Collect automated public-page evidence candidates
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.automated_research --input artifacts/prospect-review.json --output artifacts/automated-research.json --previous .cache/research-state/automated-research.json --cache-ttl-hours 24
+
+      - name: Collect automated contract-risk observations
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.security_research --input artifacts/prospect-review.json --output artifacts/security-research.json --previous .cache/research-state/security-research.json --cache-ttl-hours 24
+
+      - name: Discover dated buying-trigger candidates from project feeds
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.trigger_research --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --output artifacts/trigger-research.json --previous .cache/research-state/trigger-research.json --cache-ttl-hours 24
+
+      - name: Aggregate evidence candidates against the six qualification criteria
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.criterion_evidence --input artifacts/prospect-review.json --criteria config/qualification_criteria.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --output artifacts/criterion-evidence.json
+
+      - name: Record completed automated research passes
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.task_ledger --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --output artifacts/research-task-ledger.json
+
+      - name: Generate automated research queue
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.research_queue --input artifacts/prospect-review.json --output-dir artifacts --reviews artifacts/research-task-ledger.json --security-research artifacts/security-research.json
+
       - name: Validate review inputs, CSV/JSON parity, and audit provenance
         env:
           PYTHONPATH: src
@@ -63,6 +110,21 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m beliquid.pilot_validation --artifacts-dir artifacts
+
+      - name: Stage recent research state for the next run
+        if: always()
+        run: |
+          mkdir -p .cache/research-state
+          for name in automated-research.json security-research.json trigger-research.json research-task-ledger.json; do
+            if [ -f "artifacts/$name" ]; then cp "artifacts/$name" ".cache/research-state/$name"; fi
+          done
+
+      - name: Save recent research state cache
+        if: always() && hashFiles('.cache/research-state/*.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/research-state
+          key: beliquid-research-state-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Upload complete prospect review files
         if: always()
@@ -90,9 +152,10 @@ jobs:
             echo "- Discovery source: DEX Screener latest token profiles"
             echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
             echo "- Runtime health check: validates Python runtime only; its zero discovery counts are not batch totals"
-            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
-            echo "- Review validation: checks reviewer inputs against the current batch, reconciles CSV/JSON fields, and records input/output SHA-256 hashes"
+            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, automated-research.json, security-research.json, trigger-research.json, criterion-evidence.json, research-task-ledger.json, pilot-validation.csv, pilot-validation.json, pilot-validation.md, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
+            echo "- Review validation: checks inputs against the current batch, reconciles CSV/JSON fields, and records input/output SHA-256 hashes"
+            echo "- Research queue: no mandatory human review; unresolved identity/risk excluded from cleared list; documented concerns remain held"
             echo "- Market research priority: heuristic labels only; not a qualification score or buying-intent claim"
-            echo "- Qualification scores: withheld until criterion-level evidence is reviewed"
+            echo "- Qualification scores: withheld until criterion-level evidence coverage meets the existing threshold"
             echo "- Automated outreach: disabled"
           } >> "$GITHUB_STEP_SUMMARY"
