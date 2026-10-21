@@ -1,4 +1,4 @@
-"""Offline tests for the approved qualification configuration and conservative integration."""
+"""Offline tests for the proposed BeLiquid qualification configuration and conservative integration."""
 import json
 from pathlib import Path
 import tempfile
@@ -15,9 +15,25 @@ CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "qualification_cr
 class QualificationTests(unittest.TestCase):
     def test_config_weights_and_keys_are_valid(self):
         config = load_criteria_config(CONFIG_PATH)
-        self.assertEqual(config["status"], "approved_baseline_for_liquidity_services")
+        self.assertEqual(config["status"], "proposed_pilot_baseline")
         self.assertEqual(sum(item["weight"] for item in config["criteria"]), 100)
-        self.assertEqual([item["weight"] for item in config["criteria"]], [30, 20, 15, 15, 10, 10])
+        self.assertEqual(
+            [item["weight"] for item in config["criteria"]],
+            [25, 20, 20, 15, 10, 10],
+        )
+        self.assertEqual(
+            [item["key"] for item in config["criteria"]],
+            [
+                "service_fit_and_demonstrated_need",
+                "market_activity_and_commercial_potential",
+                "buying_trigger_and_timing",
+                "project_credibility_and_team_access",
+                "growth_and_strategic_potential",
+                "security_and_reputational_integrity",
+            ],
+        )
+        self.assertIn("manual_hold", config["action_routes"])
+        self.assertIn("verified", config["trigger_labels"])
 
     def test_rejects_missing_safeguard(self):
         config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
