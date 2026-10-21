@@ -39,7 +39,7 @@ class ReviewExportTests(unittest.TestCase):
             summary = {"qualification": {"prospects_evaluated": 2}}
             paths = write_review_exports(self.records, summary, output, review_path)
             payload = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))
-            self.assertEqual(payload["schema_version"], 6)
+            self.assertEqual(payload["schema_version"], 7)
             self.assertEqual(payload["records_exported"], 2)
             self.assertEqual(len(payload["records"]), 2)
             first = payload["records"][0]
