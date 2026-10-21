@@ -4,7 +4,7 @@ Automated discovery, qualification, scoring, and routing of potential crypto/Web
 
 ## Current status
 
-**Phase 1 foundation plus discovery and market enrichment.** The workflow runs standard-library unit tests, discovers token profiles, looks up token names/symbols and market data from DEX Screener, and emits a structured summary. It does not yet qualify leads, persist records, or contact leads.
+**Phase 1 foundation plus discovery, market enrichment, and a standalone scoring engine.** The workflow runs standard-library unit tests, discovers token profiles, looks up token names/symbols and market data from DEX Screener, and emits a structured summary. The scoring engine is implemented and tested but is not yet wired into discovery or configured with BeLiquid-approved criteria. Records are not yet persisted, and the system does not contact leads.
 
 ## Run locally
 
@@ -45,7 +45,7 @@ The workflow is also scheduled daily at 08:00 UTC. GitHub-hosted scheduled jobs 
 - `src/beliquid/main.py` — runtime health-check entry point; its summary is separate from discovery counts.
 - `src/beliquid/models.py` — validated prospect and evidence records with stable deduplication keys.
 - `src/beliquid/sources/dexscreener.py` — profile API client, response validation, normalization, deduplication, and CLI summary.
-- `src/beliquid/sources/enrichment.py` — batched token-pair lookup, token name/symbol enrichment, market metrics, evidence provenance, and partial-failure reporting.
+- `src/beliquid/sources/enrichment.py` — batched token-pair lookup, token name/symbol enrichment, market metrics, evidence provenance, and partial-failure reporting.\n- `src/beliquid/scoring.py` — configurable evidence-backed scoring primitives; unknown criteria are excluded from assessed weight, scores are withheld below an evidence-coverage threshold, and review flags remain independent of score.\n- `tests/test_scoring.py` — offline tests for score coverage, evidence requirements, unknown values, duplicate criteria, and review flags.
 - `tests/test_models.py` — tests for record validation, unknown metrics, and deduplication boundaries.
 - `tests/test_dexscreener.py` — offline tests for normalization, malformed payloads, network failures, and rate limits.
 - `tests/test_enrichment.py` — offline tests for batched lookup, market-data selection, unknown metrics, and failed requests.
