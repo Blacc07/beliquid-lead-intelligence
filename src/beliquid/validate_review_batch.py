@@ -174,9 +174,9 @@ def validate_batch(artifacts_dir: Path, repo_root: Path = Path(".")) -> dict[str
                 if actual != expected:
                     raise ValueError(f"CSV/JSON mismatch for {key} {criterion} {json_field}")
                 comparisons += 1
-            if csv_row.get(f"review_{criterion}_reviewer_note", "") != (item.get("note") or ""):
+            if csv_row.get(f"review_{criterion}_reviewer_note", "") != (item.get("reviewer_note") or ""):
                 raise ValueError(f"CSV/JSON mismatch for {key} {criterion} reviewer note")
-            if csv_row.get(f"review_{criterion}_review_flag", "") != (item.get("review_flag") or ""):
+            if csv_row.get(f"review_{criterion}_review_flag", "") != (item.get("reviewer_review_flag") or ""):
                 raise ValueError(f"CSV/JSON mismatch for {key} {criterion} review flag")
             comparisons += 2
             urls = item.get("evidence_urls", [])
