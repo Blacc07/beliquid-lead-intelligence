@@ -22,7 +22,7 @@ A high-severity provider finding creates an automated hold in the research queue
 
 - `automated-research.json`, `trigger-research.json`, and `security-research.json` are generated independently from the canonical prospect review export.
 - The research queue consumes the security output and routes a reported high-severity finding to an automated hold before commercial research.
-- The queue does not convert source results into canonical identity verification or a clean risk review.
+- The queue does not convert source results or the identity candidate-match score into canonical identity verification or a clean risk review.
 - Qualification still uses the existing six criteria and configured 60% evidence-coverage threshold. Candidate keywords and security flags do not automatically confirm criteria or generate a score.
 - Task completion is not qualification or clearance. Outreach remains disabled.
 - The audit manifest records SHA-256 hashes of both research outputs. Hashes establish artifact integrity, not the truth of a source statement.
