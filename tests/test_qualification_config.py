@@ -12,8 +12,8 @@ class QualificationCriteriaConfigTests(unittest.TestCase):
         cls.config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
     def test_config_is_explicitly_draft_and_not_live(self):
-        self.assertEqual(self.config["status"], "draft_requires_business_approval")
-        self.assertIn("not connected to live scoring", self.config["purpose"])
+        self.assertEqual(self.config["status"], "approved_baseline_for_liquidity_services")
+        self.assertIn("liquidity-related services", self.config["purpose"])
 
     def test_criteria_have_unique_keys_and_positive_weights_totaling_100(self):
         criteria = self.config["criteria"]
@@ -35,6 +35,9 @@ class QualificationCriteriaConfigTests(unittest.TestCase):
         self.assertTrue(rules["market_metrics_alone_are_not_buying_intent"])
         self.assertTrue(rules["promotion_or_boosting_is_not_a_quality_signal"])
         self.assertTrue(rules["no_automated_outreach"])
+        self.assertTrue(rules["criterion_evidence_requires_url_and_timestamp"])
+        self.assertTrue(rules["discovery_and_market_data_do_not_auto_assess_criteria"])
+        self.assertTrue(rules["manual_sample_validation_required_before_prioritization"])
         self.assertGreaterEqual(self.config["minimum_evidence_coverage_percent"], 60)
 
 
