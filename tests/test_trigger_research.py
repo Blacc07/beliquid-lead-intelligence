@@ -56,6 +56,17 @@ class TriggerResearchTests(unittest.TestCase):
         self.assertEqual(second["feeds_attempted"], 0)
         self.assertEqual(second["feeds_processed"], 1)
 
+    def test_cache_version_change_forces_feed_refresh(self):
+        prospect = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "token_symbol": "ALPHA"}]}
+        public = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "feed_candidates": [{"url": "https://alpha.example/feed.xml"}]}]}
+        feed = {"feed_url": "https://alpha.example/feed.xml", "entries": []}
+        first = collect_trigger_research(prospect, public, "2026-10-21T10:00:00Z", lambda url: feed)
+        first["records"][0]["feed_results"][0]["cache_version"] = 1
+        second = collect_trigger_research(prospect, public, "2026-10-21T11:00:00Z", lambda url: feed,
+                                          previous_payload=first, cache_ttl_hours=24)
+        self.assertEqual(second["feeds_attempted"], 1)
+        self.assertEqual(second["feeds_reused_from_cache"], 0)
+
     def test_batch_preserves_unknown_and_outreach_disabled(self):
         prospect = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "token_symbol": "ALPHA"}]}
         public = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "feed_candidates": [{"url": "https://alpha.example/feed.xml"}]}]}
