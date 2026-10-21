@@ -2,6 +2,13 @@ name: BeLiquid Pipeline Health Check
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'config/**'
+      - '.github/workflows/health-check.yml'
   schedule:
     - cron: "0 8 * * *"
 
@@ -72,6 +79,7 @@ jobs:
             echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
             echo "- Runtime health check: validates Python runtime only; its zero discovery counts are not batch totals"
             echo "- Full-batch review export: prospect-review.csv, prospect-review.json, pipeline-summary.json (artifact retention: 14 days)"
+            echo "- Market research priority: heuristic labels only; not a qualification score or buying-intent claim"
             echo "- Qualification scores: withheld until criterion-level evidence is reviewed"
             echo "- Automated outreach: disabled"
           } >> "$GITHUB_STEP_SUMMARY"
