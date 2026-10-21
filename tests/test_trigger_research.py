@@ -53,7 +53,8 @@ class TriggerResearchTests(unittest.TestCase):
                                           lambda url: self.fail("recent feed should be reused"),
                                           previous_payload=first, cache_ttl_hours=24)
         self.assertEqual(second["feeds_reused_from_cache"], 1)
-        self.assertEqual(second["feeds_attempted"], 1)
+        self.assertEqual(second["feeds_attempted"], 0)
+        self.assertEqual(second["feeds_processed"], 1)
 
     def test_batch_preserves_unknown_and_outreach_disabled(self):
         prospect = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "token_symbol": "ALPHA"}]}
