@@ -31,6 +31,7 @@ def run_health_check() -> dict[str, Any]:
 
         return {
             "application": "beliquid-lead-intelligence",
+            "component": "runtime_health_check",
             "status": "success" if not failed_checks else "failure",
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "python_version": platform.python_version(),
@@ -41,13 +42,14 @@ def run_health_check() -> dict[str, Any]:
             "records_discovered": 0,
             "leads_qualified": 0,
             "external_sources_called": 0,
-            "note": "Bootstrap check only; discovery is not implemented yet.",
+            "note": "This summary covers runtime health only; DEX Screener discovery runs in a separate workflow step.",
         }
 
     except Exception as exc:
         LOGGER.exception("Health check encountered an unexpected error.")
         return {
             "application": "beliquid-lead-intelligence",
+            "component": "runtime_health_check",
             "status": "failure",
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "checks": checks,
