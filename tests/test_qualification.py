@@ -61,6 +61,51 @@ class QualificationTests(unittest.TestCase):
         self.assertTrue(all(item["status"] == "unknown" for item in report["criteria"]))
         self.assertEqual(report["discovery_evidence"][0]["source_url"], "https://dexscreener.com/")
 
+    def test_reviewed_criterion_is_scored_only_with_evidence_and_weighted_config(self):
+        record = ProspectRecord("Example", "ethereum", contract_address="0xabc")
+        config = load_criteria_config(CONFIG_PATH)
+        reviews = {
+            "service_fit_and_demonstrated_need": {
+                "status": "confirmed", "evidence_urls": ["https://example.org/spreads"],
+                "evidence_timestamps": ["2026-10-21T12:00:00Z"],
+                "note": "Observed wide spread and shallow depth",
+            },
+            "market_activity_and_commercial_potential": {
+                "status": "not_present", "evidence_urls": ["https://example.org/activity"],
+                "evidence_timestamps": ["2026-10-21T12:00:00Z"],
+                "note": "Reviewed sample shows low sustained activity",
+            },
+        }
+        report = qualify_discovered_record(record, config, reviews)
+        self.assertEqual(report["criteria"][0]["status"], "confirmed")
+        self.assertEqual(report["criteria"][0]["weight"], 25)
+        self.assertEqual(report["criteria"][1]["status"], "not_present")
+        self.assertEqual(report["evidence_coverage_percent"], 45)
+        self.assertIsNone(report["score_percent"])
+        self.assertEqual(report["score_status"], "insufficient_evidence")
+        self.assertFalse(report["outreach_enabled"])
+
+    def test_score_issued_only_when_reviewed_coverage_reaches_threshold(self):
+        record = ProspectRecord("Example", "ethereum", contract_address="0xabc")
+        config = load_criteria_config(CONFIG_PATH)
+        reviews = {}
+        for item in config["criteria"][:4]:
+            reviews[item["key"]] = {
+                "status": "confirmed",
+                "evidence_urls": ["https://example.org/" + item["key"]],
+                "evidence_timestamps": ["2026-10-21T12:00:00Z"],
+            }
+        report = qualify_discovered_record(record, config, reviews)
+        self.assertEqual(report["evidence_coverage_percent"], 80)
+        self.assertEqual(report["score_percent"], 100.0)
+        self.assertEqual(report["score_status"], "scored")
+        self.assertFalse(report["outreach_enabled"])
+
+    def test_unknown_criterion_key_rejected(self):
+        record = ProspectRecord("Example", "ethereum", contract_address="0xabc")
+        with self.assertRaisesRegex(ValueError, "unknown keys"):
+            qualify_discovered_record(record, load_criteria_config(CONFIG_PATH), {"bogus": {"status": "confirmed"}})
+
     def test_summary_withholds_all_scores_until_review(self):
         record = ProspectRecord("Example", "ethereum", contract_address="0xabc")
         summary = summarize_qualification([record], load_criteria_config(CONFIG_PATH))
