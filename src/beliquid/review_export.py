@@ -88,6 +88,10 @@ def write_review_exports(
         "project_name", "token_symbol", "chain", "contract_address",
         "website_url_candidate", "triage_bucket", *metric_keys,
         *[f"{key}_status" for key in criterion_keys],
+        *[field for key in criterion_keys for field in (
+            f"review_{key}_status", f"review_{key}_evidence_url",
+            f"review_{key}_observed_at", f"review_{key}_reviewer_note",
+        )],
         "score_percent", "score_status", "evidence_coverage_percent",
         "review_flags", "evidence_json", "review_note",
     ]
@@ -105,6 +109,12 @@ def write_review_exports(
             }
             csv_row.update(row["metrics"])
             csv_row.update({f"{key}_status": statuses.get(key, "unknown") for key in criterion_keys})
+            # Reviewer fields are intentionally blank/unknown; exports do not invent findings.
+            for key in criterion_keys:
+                csv_row[f"review_{key}_status"] = "unknown"
+                csv_row[f"review_{key}_evidence_url"] = ""
+                csv_row[f"review_{key}_observed_at"] = ""
+                csv_row[f"review_{key}_reviewer_note"] = ""
             csv_row.update({
                 "score_percent": qualification["score_percent"],
                 "score_status": qualification["score_status"],
