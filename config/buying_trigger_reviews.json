@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "instructions": [
+    "Add one entry per reviewed prospect using a chain:contract key.",
+    "Each reviews value is a list of event objects; an empty list means no trigger has been documented yet, not that no trigger exists.",
+    "Supported trigger_type values: exchange_listing, new_trading_pair, token_launch_or_tge, venue_expansion, documented_liquidity_issue, milestone_or_campaign, token_unlock, other.",
+    "Use status unknown, inferred, or verified. Verified means a reviewer checked the cited evidence; inferred means evidence exists but the event or its relevance is not conclusive.",
+    "Every inferred or verified event requires an HTTP(S) evidence_url, timezone-aware ISO 8601 observed_at timestamp, and concise summary.",
+    "event_date is optional and must be an ISO calendar date when supplied.",
+    "A market metric, token promotion, rumor, or social engagement count alone does not verify buying intent.",
+    "This is a human-review input, not an automated news feed. Do not add secrets or private credentials."
+  ],
+  "reviews": {}
+}
