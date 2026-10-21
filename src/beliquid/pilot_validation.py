@@ -46,7 +46,9 @@ def assess_record(record: dict[str, Any]) -> dict[str, Any]:
         and bool(criteria.get(key, {}).get("evidence_timestamps"))
         for key in CRITERIA
     )
-    flags = list(qualification.get("review_flags") or [])
+    # Only explicit reviewer flags block readiness. Qualification-level flags may
+    # be generated automatically for unknown/default states and are not all reviewer flags.
+    flags = list(identity.get("review_flags") or [])
     for item in criteria.values():
         flag = item.get("reviewer_review_flag")
         if flag:
