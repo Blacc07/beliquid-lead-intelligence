@@ -60,6 +60,17 @@ class CriterionReviewTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "timezone"):
                 load_criterion_reviews(path, load_criteria_config())
 
+    def test_non_string_timestamp_is_rejected(self):
+        payload = {"reviews": {"solana:abc": {"buying_trigger_and_timing": {
+            "status": "confirmed", "evidence_urls": [URL],
+            "evidence_timestamps": [123]
+        }}}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "reviews.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ISO 8601"):
+                load_criterion_reviews(path, load_criteria_config())
+
     def test_unknown_criterion_rejected(self):
         payload = {"reviews": {"solana:abc": {"fake_criterion": {"status": "unknown"}}}}
         with tempfile.TemporaryDirectory() as directory:
