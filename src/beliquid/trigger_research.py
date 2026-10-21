@@ -28,7 +28,7 @@ MAX_WORKERS = 6
 TRIGGER_TERMS = {
     "exchange_listing": ("listing", "listed on", "exchange listing", "new trading pair", "trading pair"),
     "token_launch_or_tge": ("launch", "mainnet", "token generation", "tge", "token launch"),
-    "fundraising_or_partnership": ("fundraising", "raised", "funding round", "partnership", "integrat"),
+    "milestone_or_campaign": ("fundraising", "raised", "funding round", "partnership", "integrat"),
     "venue_expansion": ("venue expansion", "new exchange", "market expansion"),
     "documented_liquidity_issue": ("liquidity issue", "market maker", "market making", "liquidity provider"),
     "milestone_or_campaign": ("milestone", "campaign", "incentive", "ecosystem"),
