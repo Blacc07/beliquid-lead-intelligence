@@ -104,7 +104,8 @@ Use `config/identity_risk_reviews.json`. Supported identity statuses are `unknow
 3. Commit review files only after a second reviewer checks evidence and status choices. Do not commit credentials or private personal information. The repository is public, so consider whether prospect-specific reviewer notes belong in the repository at all; use an approved private store if needed.
 4. Run the pipeline again so exports consume the reviewed files. Inspect the artifact from that run, not an older artifact.
 5. Compare `prospect-review.csv` with `prospect-review.json` for each reviewed prospect: chain, contract, six criterion statuses, score/withheld state, evidence coverage, criterion evidence URL/timestamp/note, identity/risk statuses, and action route must agree. CSV is a review convenience; JSON is structured output. If they disagree, do not use the record for decisions—raise a defect and retain both artifacts.
-6. Confirm `pipeline-summary.json` counts reviewed prospects and issued/withheld scores consistently. Check that outreach remains disabled.
+6. Confirm `pipeline-summary.json` counts reviewed prospects and issued/withheld scores consistently. Check that outreach remains disabled. The workflow now runs `python -m beliquid.validate_review_batch --artifacts-dir artifacts --write-manifest`; this fails the job if review keys do not match the current batch, CSV/JSON fields disagree, a score is issued below the threshold, a risk hold fails to route to `manual_hold`, or outreach is enabled.
+7. Preserve `audit-manifest.json` with the exports. It records the Actions run/commit context and SHA-256 hashes of review/config inputs and generated exports. Hashes establish file integrity/provenance, not the truth of the cited evidence.
 
 ## Scoring and routing safeguards
 
