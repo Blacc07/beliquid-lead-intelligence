@@ -25,6 +25,8 @@ class SecurityResearchTests(unittest.TestCase):
         self.assertEqual(result["fetch_status"], "success")
         self.assertEqual(result["risk_status"], "concern")
         self.assertIn("is_honeypot", {item["field"] for item in result["findings"]})
+        self.assertEqual(result["criterion_evidence_candidate"]["criterion"], "security_and_reputational_integrity")
+        self.assertEqual(result["criterion_evidence_candidate"]["status"], "candidate_only")
 
     def test_clean_report_is_not_global_clearance(self):
         payload = {"code": 1, "result": {"0xabc": {"is_honeypot": "0", "is_mintable": "0"}}}
