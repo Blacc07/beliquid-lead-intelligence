@@ -10,7 +10,7 @@ from beliquid.review_export import write_review_exports
 
 
 class ReviewExportTests(unittest.TestCase):
-    def test_exports_full_batch_with_unknown_criteria_and_no_score(self):
+    def test_exports_full_batch_with_unknown_criteria_identity_and_risk(self):
         records = [
             ProspectRecord(
                 project_name="Candidate One",
@@ -29,10 +29,14 @@ class ReviewExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             paths = write_review_exports(records, {"qualification": {"prospects_evaluated": 2}}, directory)
             payload = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))
+            self.assertEqual(payload["schema_version"], 2)
             self.assertEqual(payload["records_exported"], 2)
             self.assertEqual(len(payload["records"]), 2)
             first = payload["records"][0]
             self.assertEqual(first["triage_bucket"], "identity_verification_required")
+            self.assertEqual(first["action_route"], "research")
+            self.assertEqual(first["identity_risk"]["identity_status"], "unknown")
+            self.assertEqual(first["identity_risk"]["risk_status"], "unknown")
             self.assertIsNone(first["qualification"]["score_percent"])
             self.assertTrue(all(c["status"] == "unknown" for c in first["qualification"]["criteria"]))
             self.assertFalse(first["qualification"]["outreach_enabled"])
@@ -45,6 +49,10 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_evidence_url"], "")
             self.assertEqual(rows[0]["volume_24h_usd"], "0")
             self.assertEqual(rows[0]["score_percent"], "")
+            self.assertEqual(rows[0]["identity_status"], "unknown")
+            self.assertEqual(rows[0]["risk_status"], "unknown")
+            self.assertEqual(rows[0]["action_route"], "research")
+            self.assertIn("official_identity_unverified", rows[0]["identity_risk_flags"])
             self.assertTrue(Path(paths["summary"]).exists())
 
 
