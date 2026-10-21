@@ -147,7 +147,7 @@ def fetch_page(url: str, timeout: float = TIMEOUT_SECONDS, opener=None) -> dict[
 
 
 def _record_fingerprint(record: dict[str, Any]) -> str:
-    stable = {name: record.get(name) for name in ("project_name", "token_symbol", "chain", "contract_address", "website_url_candidate")}
+    stable = {"cache_version": RESEARCH_CACHE_VERSION, **{name: record.get(name) for name in ("project_name", "token_symbol", "chain", "contract_address", "website_url_candidate")}}
     canonical = json.dumps(stable, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -171,6 +171,7 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
         "project_name": record.get("project_name", ""),
         "chain": record.get("chain", ""),
         "contract_address": record.get("contract_address", ""),
+        "cache_version": RESEARCH_CACHE_VERSION,
         "input_fingerprint": _record_fingerprint(record),
         "reused_from_cache": False,
         "candidate_website_url": candidate,
@@ -296,6 +297,7 @@ def collect_research(payload: dict[str, Any], observed_at: str | None = None, fe
         cached = previous_by_key.get(key)
         fingerprint = _record_fingerprint(record)
         if (cached and cached.get("input_fingerprint") == fingerprint
+                and cached.get("cache_version") == RESEARCH_CACHE_VERSION
                 and cached.get("fetch_status") in {"success", "no_website_candidate"}
                 and _within_cache_ttl(cached.get("observed_at"), cache_ttl_hours, now)):
             reused = dict(cached)
@@ -313,6 +315,7 @@ def collect_research(payload: dict[str, Any], observed_at: str | None = None, fe
         "records_with_fetch_failures": sum(item["fetch_status"] == "fetch_failed" for item in results),
         "records_reused_from_cache": sum(bool(item.get("reused_from_cache")) for item in results),
         "cache_ttl_hours": cache_ttl_hours,
+        "cache_version": RESEARCH_CACHE_VERSION,
         "identity_or_risk_status_changed": False,
         "qualification_scores_changed": False,
         "outreach_enabled": False,
