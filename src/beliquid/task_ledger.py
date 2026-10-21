@@ -57,12 +57,14 @@ def build_task_ledger(
     public_research: dict[str, Any] | None,
     security_research: dict[str, Any] | None,
     completed_at: str | None = None,
+    trigger_research: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     records = prospect_payload.get("records")
     if not isinstance(records, list) or any(not isinstance(record, dict) for record in records):
         raise ValueError("prospect-review input must contain a records list of objects")
     public_by_key = _source_record_map(public_research, "automated public research")
     security_by_key = _source_record_map(security_research, "automated security research")
+    trigger_by_key = _source_record_map(trigger_research, "automated trigger research")
     now = completed_at or datetime.now(timezone.utc).isoformat()
     ledger: dict[str, dict[str, Any]] = {}
     for record in records:
@@ -99,16 +101,18 @@ def build_task_ledger(
         if entry:
             tasks["investigate_market_quality"] = entry
 
-        # Keyword trigger search is considered an executed, inconclusive pass only
-        # when the public page was actually fetched. Candidates remain unverified.
-        if public.get("fetch_status") == "success" and page.get("final_url"):
-            entry = _completion(
-                "research_buying_triggers", record,
-                [(page["final_url"], public.get("observed_at", now))],
-                "inconclusive", now,
-            )
-            if entry:
-                tasks["research_buying_triggers"] = entry
+        # Complete trigger research only if a linked feed was fetched successfully.
+        # A successful feed with no matching entries is inconclusive; no feed or a
+        # failed feed leaves the task open for a later run/source.
+        trigger = trigger_by_key.get(key, {})
+        trigger_evidence = [
+            (item.get("final_feed_url") or item.get("feed_url"), item.get("observed_at", now))
+            for item in trigger.get("feed_results", [])
+            if isinstance(item, dict) and item.get("fetch_status") == "success"
+        ]
+        entry = _completion("research_buying_triggers", record, trigger_evidence, "inconclusive", now)
+        if entry:
+            tasks["research_buying_triggers"] = entry
 
         if tasks:
             ledger[key] = tasks
@@ -134,13 +138,14 @@ def build_task_ledger(
     }
 
 
-def write_task_ledger(prospect_path: Path, public_path: Path, security_path: Path, output_path: Path) -> dict[str, Any]:
+def write_task_ledger(prospect_path: Path, public_path: Path, security_path: Path, output_path: Path, trigger_path: Path | None = None) -> dict[str, Any]:
     prospect = json.loads(prospect_path.read_text(encoding="utf-8"))
     public = json.loads(public_path.read_text(encoding="utf-8")) if public_path.is_file() else None
     security = json.loads(security_path.read_text(encoding="utf-8")) if security_path.is_file() else None
+    trigger = json.loads(trigger_path.read_text(encoding="utf-8")) if trigger_path and trigger_path.is_file() else None
     if not isinstance(prospect, dict):
         raise ValueError("prospect-review input must be a JSON object")
-    result = build_task_ledger(prospect, public, security)
+    result = build_task_ledger(prospect, public, security, trigger_research=trigger)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return {key: result[key] for key in ("records_with_task_completions", "task_completion_counts", "outreach_enabled")}
@@ -151,10 +156,11 @@ def main() -> int:
     parser.add_argument("--input", type=Path, default=Path("artifacts/prospect-review.json"))
     parser.add_argument("--public-research", type=Path, default=Path("artifacts/automated-research.json"))
     parser.add_argument("--security-research", type=Path, default=Path("artifacts/security-research.json"))
+    parser.add_argument("--trigger-research", type=Path, default=Path("artifacts/trigger-research.json"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/research-task-ledger.json"))
     args = parser.parse_args()
     try:
-        print(json.dumps(write_task_ledger(args.input, args.public_research, args.security_research, args.output), indent=2))
+        print(json.dumps(write_task_ledger(args.input, args.public_research, args.security_research, args.output, args.trigger_research), indent=2))
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(json.dumps({"status": "failure", "error": str(exc)}, indent=2))
         return 1
