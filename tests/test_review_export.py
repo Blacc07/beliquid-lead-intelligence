@@ -39,7 +39,7 @@ class ReviewExportTests(unittest.TestCase):
             summary = {"qualification": {"prospects_evaluated": 2}}
             paths = write_review_exports(self.records, summary, output, review_path)
             payload = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))
-            self.assertEqual(payload["schema_version"], 4)
+            self.assertEqual(payload["schema_version"], 5)
             self.assertEqual(payload["records_exported"], 2)
             self.assertEqual(len(payload["records"]), 2)
             first = payload["records"][0]
@@ -52,6 +52,9 @@ class ReviewExportTests(unittest.TestCase):
             self.assertFalse(first["qualification"]["outreach_enabled"])
             self.assertEqual(payload["identity_risk_summary"]["research_count"], 2)
             self.assertEqual(payload["market_research_priority_summary"]["prospects_triaged"], 2)
+            self.assertEqual(payload["buying_trigger_summary"]["prospects_by_status"]["unknown"], 2)
+            self.assertEqual(first["buying_triggers"]["status"], "unknown")
+            self.assertEqual(first["buying_triggers"]["trigger_count"], 0)
             self.assertEqual(first["market_research_priority"]["priority"], "low")
             self.assertIsNone(first["market_research_priority"]["qualification_score"])
             self.assertFalse(first["market_research_priority"]["buying_intent_verified"])
@@ -68,6 +71,9 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(rows[0]["risk_status"], "unknown")
             self.assertEqual(rows[0]["action_route"], "research")
             self.assertEqual(rows[0]["market_research_priority"], "low")
+            self.assertEqual(rows[0]["buying_trigger_status"], "unknown")
+            self.assertEqual(rows[0]["buying_trigger_count"], "0")
+            self.assertEqual(json.loads(rows[0]["buying_triggers_json"]), [])
             self.assertIn("official_identity_unverified", rows[0]["identity_risk_flags"])
             self.assertTrue(Path(paths["summary"]).exists())
 
@@ -96,6 +102,42 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(rows[0]["action_route"], "manual_hold")
             self.assertEqual(rows[0]["risk_status"], "concern")
             self.assertEqual(rows[0]["identity_risk_reviewer_note"], "Documented concern for human follow-up.")
+
+
+    def test_reviewed_trigger_is_exported_but_does_not_change_route_or_score(self):
+        with tempfile.TemporaryDirectory() as directory:
+            identity_path = Path(directory) / "identity.json"
+            identity_path.write_text('{"reviews":{}}', encoding="utf-8")
+            trigger_path = Path(directory) / "triggers.json"
+            trigger_path.write_text(json.dumps({"reviews": {
+                "SOLANA:so111": [{
+                    "trigger_type": "exchange_listing",
+                    "status": "verified",
+                    "evidence_url": URL,
+                    "observed_at": TIMESTAMP,
+                    "event_date": "2026-10-25",
+                    "summary": "Official exchange listing announcement",
+                }]
+            }}), encoding="utf-8")
+            paths = write_review_exports(
+                self.records, {}, Path(directory) / "out", identity_path, trigger_path
+            )
+            payload = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))
+            first = payload["records"][0]
+            self.assertEqual(first["buying_triggers"]["status"], "verified")
+            self.assertEqual(first["buying_triggers"]["verified_count"], 1)
+            self.assertEqual(first["action_route"], "research")
+            self.assertIsNone(first["qualification"]["score_percent"])
+            self.assertFalse(first["qualification"]["outreach_enabled"])
+            self.assertEqual(payload["buying_trigger_summary"]["verified_trigger_observations"], 1)
+
+    def test_malformed_trigger_review_fails_export_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            trigger_path = Path(directory) / "triggers.json"
+            trigger_path.write_text('{"reviews":{"solana:abc":[{"status":"verified"}]}}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "evidence URL"):
+                write_review_exports(self.records, {}, Path(directory) / "out",
+                                     buying_trigger_reviews_path=trigger_path)
 
 
 if __name__ == "__main__":
