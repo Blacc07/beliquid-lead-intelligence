@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "name": "BeLiquid initial liquidity-service prospect qualification",
+  "status": "draft_requires_business_approval",
+  "purpose": "Rank publicly evidenced fit for BeLiquid Agency's Web3 liquidity-related services. This configuration is a draft and is not connected to live scoring.",
+  "minimum_evidence_coverage_percent": 60,
+  "rules": {
+    "unknown_is_not_zero": true,
+    "market_metrics_alone_are_not_buying_intent": true,
+    "promotion_or_boosting_is_not_a_quality_signal": true,
+    "confirmed_or_not_present_requires_evidence_url": true,
+    "risk_flags_are_independent_of_score": true,
+    "no_automated_outreach": true
+  },
+  "criteria": [
+    {
+      "key": "explicit_liquidity_need",
+      "label": "Explicit liquidity need or initiative",
+      "weight": 30,
+      "positive_definition": "An official project source explicitly describes a liquidity initiative, liquidity-provider search, market-making request, or comparable need relevant to BeLiquid's actual services.",
+      "evidence_examples": ["official project announcement", "official documentation", "verified team statement"],
+      "not_enough_on_its_own": ["low liquidity", "high volume", "price movement", "token promotion"],
+      "unknown_when": "No reliable public evidence confirms or rules out a relevant initiative."
+    },
+    {
+      "key": "active_product_or_protocol",
+      "label": "Active product or protocol",
+      "weight": 20,
+      "positive_definition": "A project has a verifiable product, protocol, application, or documented launch activity beyond a token profile alone.",
+      "evidence_examples": ["official product documentation", "working application or protocol page", "official release notes"],
+      "unknown_when": "The product's existence or current activity cannot be verified from available sources."
+    },
+    {
+      "key": "recent_business_trigger",
+      "label": "Recent, verifiable business trigger",
+      "weight": 15,
+      "positive_definition": "A recent official announcement indicates a launch, exchange or chain expansion, ecosystem partnership, major product release, or another event plausibly relevant to liquidity services.",
+      "evidence_examples": ["official dated announcement", "official release notes", "official ecosystem announcement"],
+      "not_enough_on_its_own": ["undated social chatter", "price spike", "paid token boost"],
+      "unknown_when": "No reliable dated source was found or source freshness cannot be established."
+    },
+    {
+      "key": "official_identity_verified",
+      "label": "Official project identity verified",
+      "weight": 15,
+      "positive_definition": "A project-owned website or official documentation is identified and can be cross-checked against at least one other credible project-controlled or ecosystem source.",
+      "evidence_examples": ["official website", "official docs", "ecosystem directory linking to the project"],
+      "unknown_when": "Only an unverified token profile, social link, or ambiguous domain is available."
+    },
+    {
+      "key": "decision_maker_path",
+      "label": "Public, legitimate decision-maker path",
+      "weight": 10,
+      "positive_definition": "A public business contact route or clearly identified team/business-development role is available from an official source.",
+      "evidence_examples": ["official business contact page", "official team page", "public BD or partnerships contact"],
+      "not_enough_on_its_own": ["guessed email addresses", "private personal data", "unverified scraped identities"],
+      "unknown_when": "No official, appropriate business contact route can be verified."
+    },
+    {
+      "key": "evidence_freshness",
+      "label": "Evidence is current enough to act on",
+      "weight": 10,
+      "positive_definition": "The key business trigger and project activity are supported by dated evidence within a configurable review window; default window is 180 days.",
+      "evidence_examples": ["dated official announcement", "recent official release notes", "dated project update"],
+      "unknown_when": "Evidence has no date, cannot be checked, or is outside the review window without a current corroborating source."
+    }
+  ],
+  "review_flags": [
+    "official_identity_unverified",
+    "conflicting_project_identity",
+    "potential_impersonation_or_scam",
+    "evidence_outdated",
+    "possible_regulatory_or_reputational_risk",
+    "unclear_service_fit"
+  ],
+  "review_policy": "A review flag requires human review regardless of score. A high score does not override risk flags.",
+  "approval_note": "Weights and definitions are provisional. Approve or revise them before integrating this configuration into live lead scoring."
+}
