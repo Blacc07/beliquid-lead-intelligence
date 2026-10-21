@@ -103,7 +103,8 @@ def build_criterion_evidence(
                 {k: v for k, v in item.items() if k not in {"criterion", "candidate_type", "evidence_url", "observed_at", "observed", "status"}},
             )
             checks[item["criterion"]].append(candidate)
-            if item.get("observed") and candidate["source_url"] and candidate["observed_at"]:
+            if (item.get("observed") and candidate["source_url"] and candidate["observed_at"]
+                    and not (item["criterion"] == "buying_trigger_and_timing" and item.get("candidate_type") == "undated_homepage_trigger_keyword_match")):
                 evidence[item["criterion"]].append(candidate)
 
         security_candidate = security.get("criterion_evidence_candidate")
