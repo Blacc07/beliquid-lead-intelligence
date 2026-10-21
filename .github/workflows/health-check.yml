@@ -63,11 +63,6 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.main
 
-      - name: Generate automated research queue
-        env:
-          PYTHONPATH: src
-        run: python -m beliquid.research_queue --input artifacts/prospect-review.json --output-dir artifacts --reviews config/research_task_reviews.json
-
       - name: Collect automated public-page evidence candidates
         env:
           PYTHONPATH: src
@@ -77,6 +72,11 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m beliquid.security_research --input artifacts/prospect-review.json --output artifacts/security-research.json
+
+      - name: Generate automated research queue
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.research_queue --input artifacts/prospect-review.json --output-dir artifacts --reviews config/research_task_reviews.json --security-research artifacts/security-research.json
 
       - name: Validate review inputs, CSV/JSON parity, and audit provenance
         env:
