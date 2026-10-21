@@ -11,14 +11,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from beliquid.identity_risk import IdentityRiskAssessment
+from beliquid.identity_risk import assessment_for_prospect, load_identity_risk_reviews
 from beliquid.models import ProspectRecord
 from beliquid.qualification import load_criteria_config, qualify_discovered_record
 
 
 def _record_dict(record: ProspectRecord, config: dict[str, Any]) -> dict[str, Any]:
     qualification = qualify_discovered_record(record, config)
-    identity_risk = IdentityRiskAssessment()
+    identity_risk = assessment_for_prospect(record.chain, record.contract_address, _IDENTITY_RISK_REVIEWS)
     has_website = bool(record.website_url)
     # These are research queues, not qualification judgments or exclusions.
     triage_bucket = (
@@ -65,7 +65,7 @@ def write_review_exports(
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     config = load_criteria_config()
-    rows = [_record_dict(record, config) for record in records]
+    global _IDENTITY_RISK_REVIEWS\n    _IDENTITY_RISK_REVIEWS = load_identity_risk_reviews()\n    rows = [_record_dict(record, config) for record in records]
 
     json_path = destination / "prospect-review.json"
     csv_path = destination / "prospect-review.csv"
@@ -75,7 +75,7 @@ def write_review_exports(
         "schema_version": 2,
         "source": "DEX Screener",
         "records_exported": len(rows),
-        "qualification_summary": summary.get("qualification", {}),
+        "qualification_summary": summary.get("qualification", {}),\n        "identity_risk_summary": identity_risk_summary,
         "records": rows,
         "important_note": (
             "Research-only export. Criterion findings remain unknown until a reviewer records "
