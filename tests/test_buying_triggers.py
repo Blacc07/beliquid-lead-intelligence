@@ -46,6 +46,12 @@ class BuyingTriggerTests(unittest.TestCase):
             BuyingTrigger(status="verified", evidence_url=URL, observed_at=TIMESTAMP,
                           summary="Listing", event_date="not-a-date")
 
+    def test_unknown_trigger_rejects_partial_or_malformed_evidence(self):
+        with self.assertRaisesRegex(ValueError, "timestamp"):
+            BuyingTrigger(status="unknown", evidence_url=URL)
+        with self.assertRaisesRegex(ValueError, "HTTP"):
+            BuyingTrigger(status="unknown", evidence_url="javascript:bad", observed_at=TIMESTAMP)
+
     def test_verified_status_takes_precedence_over_inferred(self):
         inferred = BuyingTrigger("venue_expansion", "inferred", URL, TIMESTAMP,
                                  summary="Project may expand venues")
