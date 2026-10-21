@@ -69,6 +69,7 @@ class _PageParser(HTMLParser):
         self.in_title = False
         self.description = ""
         self.links: list[dict[str, str]] = []
+        self.feed_links: list[str] = []
         self.text_parts: list[str] = []
         self._meta: dict[str, str] = {}
 
@@ -83,6 +84,11 @@ class _PageParser(HTMLParser):
                 key = name or prop
                 if values.get("content"):
                     self._meta[key] = values["content"][:1000]
+        if tag.casefold() == "link" and values.get("href"):
+            rel = set(values.get("rel", "").casefold().split())
+            kind = values.get("type", "").casefold()
+            if "alternate" in rel and ("rss" in kind or "atom" in kind or "xml" in kind) and len(self.feed_links) < 10:
+                self.feed_links.append(values["href"][:2000])
         if tag.casefold() == "a" and values.get("href") and len(self.links) < MAX_LINKS:
             self.links.append({"href": values["href"][:2000], "text": ""})
 
@@ -109,6 +115,7 @@ class _PageParser(HTMLParser):
             "og_site_name": self._meta.get("og:site_name", "")[:300],
             "text_excerpt": " ".join(self.text_parts)[:MAX_TEXT],
             "links": self.links,
+            "feed_links": self.feed_links,
         }
 
 
@@ -148,6 +155,7 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
         "fetch_status": "not_attempted",
         "page": None,
         "source_candidates": [],
+        "feed_candidates": [],
         "trigger_candidates": [],
         "criterion_evidence_candidates": [],
         "identity_status": "unknown",
@@ -175,6 +183,11 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
         p = urlparse(absolute)
         if p.scheme in {"http", "https"} and p.netloc:
             links.append({"url": absolute, "label": link.get("text", "")[:300]})
+    feed_candidates = []
+    for feed_url in page.get("feed_links", []):
+        absolute_feed = urljoin(final_url, str(feed_url))
+        if _public_http_url(absolute_feed) and absolute_feed not in {item["url"] for item in feed_candidates}:
+            feed_candidates.append({"url": absolute_feed, "source_type": "candidate_project_feed", "observed_at": observed_at})
     page_text = str(page.get("text_excerpt", ""))
     lowered = page_text.casefold()
     triggers = []
@@ -198,6 +211,7 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
         },
         "source_candidates": [{"url": final_url, "source_type": "candidate_project_website", "observed_at": observed_at}]
             + [{"url": item["url"], "source_type": "outbound_link_candidate", "label": item["label"], "observed_at": observed_at} for item in links],
+        "feed_candidates": feed_candidates,
         "trigger_candidates": triggers,
         "criterion_evidence_candidates": [
             {"criterion": "project_credibility_and_team_access", "candidate_type": "contract_address_mentioned_on_candidate_website", "observed": contract_mentioned, "evidence_url": final_url, "observed_at": observed_at},
