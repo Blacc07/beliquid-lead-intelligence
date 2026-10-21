@@ -12,7 +12,7 @@ The workflow fetches candidate project homepages from the existing DEX Screener 
 
 ## Automated research source coverage
 
-The workflow also runs a GoPlus contract-security adapter, discovers RSS/Atom feeds linked by candidate project pages, records dated buying-trigger candidates, and generates a run-local task ledger from source calls that actually completed. High-severity contract flags route the research queue to an automated hold. Clean or missing security reports never establish global safety; trigger candidates remain unverified, canonical identity/risk and trigger reviews are not silently rewritten, scores still use the existing six criteria and 60% evidence-coverage threshold, and outreach remains disabled. See [Automated Research Source Coverage](docs/AUTOMATED_RESEARCH_SOURCES.md) for rate bounds, failure semantics, credentials, and limitations.
+The workflow also runs GoPlus contract-security checks for configured EVM chains and RugCheck reports for Solana, discovers RSS/Atom feeds linked by candidate project pages, records dated buying-trigger candidates, and generates a run-local task ledger from source calls that actually completed. High-severity contract flags route the research queue to an automated hold. Clean or missing security reports never establish global safety; trigger candidates remain unverified, canonical identity/risk and trigger reviews are not silently rewritten, scores still use the existing six criteria and 60% evidence-coverage threshold, and outreach remains disabled. See [Automated Research Source Coverage](docs/AUTOMATED_RESEARCH_SOURCES.md) for rate bounds, failure semantics, credentials, and limitations.
 
 ## Review procedure
 
@@ -87,7 +87,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 - `src/beliquid/review_export.py` — full-batch CSV/JSON review artifacts.
 - `src/beliquid/buying_triggers.py` — validates canonical buying-trigger observations.
 - `src/beliquid/automated_research.py` — bounded candidate homepage collection and feed discovery.
-- `src/beliquid/security_research.py` — GoPlus contract-risk observations and retry handling.
+- `src/beliquid/security_research.py` — GoPlus EVM and RugCheck Solana contract-risk observations with retry handling.
 - `src/beliquid/trigger_research.py` — dated RSS/Atom trigger candidates.
 - `src/beliquid/task_ledger.py` — source-backed automated task completion ledger.
 - `src/beliquid/criterion_reviews.py` — validates reviewer assessments against configured criteria.
