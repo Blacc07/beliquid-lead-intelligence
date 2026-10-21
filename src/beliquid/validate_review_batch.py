@@ -242,7 +242,7 @@ def write_audit_manifest(artifacts_dir: Path, validation: dict[str, Any], repo_r
             raise ValueError(f"review input/config missing for audit manifest: {path}")
         input_hashes[str(relative)] = _sha256(path)
     output_hashes = {}
-    for name in ("prospect-review.csv", "prospect-review.json", "pipeline-summary.json", "research-queue.csv", "research-queue.json", "automated-research.json", "security-research.json", "research-task-ledger.json"):
+    for name in ("prospect-review.csv", "prospect-review.json", "pipeline-summary.json", "research-queue.csv", "research-queue.json", "automated-research.json", "security-research.json", "trigger-research.json", "research-task-ledger.json"):
         path = artifacts_dir / name
         output_hashes[name] = _sha256(path)
     manifest = {
