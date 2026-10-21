@@ -253,17 +253,63 @@ def research_security(record: dict[str, Any], observed_at: str, requester: Calla
     return result
 
 
-def collect_security(payload: dict[str, Any], observed_at: str | None = None, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
+def _security_cache_fresh(observed_at: Any, ttl_hours: float, now: datetime) -> bool:
+    if not isinstance(observed_at, str):
+        return False
+    try:
+        stamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if stamp.tzinfo is None or stamp.utcoffset() is None:
+        return False
+    age = (now - stamp.astimezone(timezone.utc)).total_seconds()
+    return 0 <= age <= ttl_hours * 3600
+
+
+def collect_security(payload: dict[str, Any], observed_at: str | None = None, requester: Callable[[str], dict[str, Any]] = _default_request, previous_payload: dict[str, Any] | None = None, cache_ttl_hours: float = 24) -> dict[str, Any]:
     records = payload.get("records")
     if not isinstance(records, list):
         raise ValueError("prospect-review input must contain a records list")
     timestamp = observed_at or datetime.now(timezone.utc).isoformat()
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        results = list(pool.map(lambda record: research_security(record, timestamp, requester), records))
+    now = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+    prior_records = previous_payload.get("records", []) if isinstance(previous_payload, dict) else []
+    prior_by_key = {f"{str(item.get('chain') or '').casefold()}:{str(item.get('contract_address') or '').casefold()}": item for item in prior_records if isinstance(item, dict)}
+    results = []
+    reused = 0
+    historical_retained = 0
+    for record in records:
+        key = f"{str(record.get('chain') or '').casefold()}:{str(record.get('contract_address') or '').casefold()}"
+        prior = prior_by_key.get(key)
+        canonical = record.get("identity_risk") or {}
+        explicit_clear = canonical.get("identity_status") == "verified" and canonical.get("risk_status") == "clear"
+        prior_concern = bool(prior and prior.get("risk_status") == "concern" and not explicit_clear)
+        if prior and prior.get("fetch_status") in {"success", "no_report"} and _security_cache_fresh(prior.get("observed_at"), cache_ttl_hours, now) and not (prior_concern and prior.get("risk_status") != "concern"):
+            item = dict(prior)
+            item["reused_from_cache"] = True
+            results.append(item)
+            reused += 1
+            continue
+        current = research_security(record, timestamp, requester)
+        current["reused_from_cache"] = False
+        if prior_concern and current.get("risk_status") != "concern":
+            prior_findings = prior.get("findings") if isinstance(prior.get("findings"), list) else []
+            current_findings = current.get("findings") if isinstance(current.get("findings"), list) else []
+            current.update({
+                "risk_status": "concern",
+                "historical_concern_retained": True,
+                "prior_concern_observed_at": prior.get("observed_at"),
+                "prior_concern_provider": prior.get("provider"),
+                "findings": prior_findings + current_findings,
+                "research_note": "A prior high-severity concern is retained because the latest source result did not explicitly resolve it. A source outage or clean single-provider report does not silently clear a documented concern.",
+            })
+            historical_retained += 1
+        results.append(current)
     return {
         "schema_version": 1,
         "source": "GoPlus (configured EVM chains) and RugCheck (Solana)",
-        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS},
+        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
+        "records_reused_from_cache": reused,
+        "historical_concerns_retained": historical_retained,
         "records_exported": len(results),
         "records_with_reports": sum(item["fetch_status"] == "success" for item in results),
         "records_with_high_risk_flags": sum(item["risk_status"] == "concern" for item in results),
@@ -277,11 +323,12 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
     }
 
 
-def write_security(input_path: Path, output_path: Path) -> dict[str, Any]:
+def write_security(input_path: Path, output_path: Path, previous_path: Path | None = None, cache_ttl_hours: float = 24) -> dict[str, Any]:
     payload = json.loads(input_path.read_text(encoding="utf-8"))
+    previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path and previous_path.is_file() else None
     if not isinstance(payload, dict):
         raise ValueError("prospect-review input must be a JSON object")
-    result = collect_security(payload)
+    result = collect_security(payload, previous_payload=previous, cache_ttl_hours=cache_ttl_hours)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return {key: result[key] for key in ("records_exported", "records_with_reports", "records_with_high_risk_flags", "records_without_reports", "records_with_fetch_failures", "outreach_enabled")}
@@ -291,9 +338,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=Path("artifacts/prospect-review.json"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/security-research.json"))
+    parser.add_argument("--previous", type=Path, default=Path(".cache/research-state/security-research.json"))
+    parser.add_argument("--cache-ttl-hours", type=float, default=24)
     args = parser.parse_args()
     try:
-        print(json.dumps(write_security(args.input, args.output), indent=2, sort_keys=True))
+        print(json.dumps(write_security(args.input, args.output, args.previous, args.cache_ttl_hours), indent=2, sort_keys=True))
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(json.dumps({"status": "failure", "error": str(exc)}, indent=2))
         return 1
