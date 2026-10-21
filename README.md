@@ -25,7 +25,7 @@ The discovery command makes one live HTTP request. The enrichment command fetche
 2. Select **BeLiquid Pipeline Health Check**.
 3. Choose **Run workflow** to execute it manually.
 4. Review the unit-test output, discovery/enrichment summary, and runtime health summary.
-5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv`, `prospect-review.json`, and `pipeline-summary.json`. The CSV includes reviewer status, evidence URL, observed timestamp, and reviewer-note columns for each criterion; those fields start as unknown/blank and do not affect scoring automatically. Buying-trigger observations from `config/buying_trigger_reviews.json` are also exported with their evidence URL, observation timestamp, optional event date, and verified/inferred/unknown status. Trigger labels do not automatically change scores or identity/risk routing. Artifacts are retained for 14 days.
+5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv`, `prospect-review.json`, and `pipeline-summary.json`. The CSV includes reviewer status, evidence URL, observed timestamp, and reviewer-note columns for each criterion; those fields start as unknown/blank and do not affect scoring automatically. Buying-trigger observations from `config/buying_trigger_reviews.json` are also exported with their evidence URL, observation timestamp, optional event date, and verified/inferred/unknown status. Criterion assessments from `config/criterion_reviews.json` can be recorded as confirmed/not_present/unknown with matching evidence URLs and timezone-aware timestamps. Only criterion assessments count toward qualification coverage; trigger records do not automatically confirm criteria. Artifacts are retained for 14 days.
 
 The workflow is scheduled daily at 08:00 UTC. Scheduled jobs can be delayed. Usage limits depend on the repository's plan, runner type, and GitHub's current policies; public visibility does not guarantee unlimited use of every runner type.
 
@@ -50,7 +50,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 2. **Verify identity and risk:** cross-check chain, contract, official domain, and credible project references; hold conflicting identities.
 3. **Diagnose market quality:** measure liquidity separately from volume. Add spread, order-book depth, slippage, cross-venue divergence, and time-series analysis only when suitable source data is available.
 4. **Review buying triggers:** add human-reviewed, dated event evidence in `config/buying_trigger_reviews.json`. Supported types include exchange listings, new trading pairs, TGE/launch, venue expansion, documented liquidity issues, milestones/campaigns, and token unlocks. Verified/inferred entries require an HTTP(S) source URL, timezone-aware observation timestamp, and summary. This component validates and exports reviewer input; it does not crawl news or treat market metrics as buying intent.
-5. **Score and route:** score only reviewed criterion evidence; keep data completeness and risk flags separate; route to research, nurture, BD review, manual hold, or reject.
+5. **Review criteria, score, and route:** enter criterion-specific assessments in `config/criterion_reviews.json`. Confirmed/not_present findings require evidence URLs and timezone-aware timestamps. Scores remain withheld until the configured 60% evidence-coverage threshold is reached. Buying-trigger evidence does not automatically confirm a criterion; keep data completeness and identity/risk flags separate.
 6. **Prepare outreach drafts:** generate evidence-backed service angles and discovery questions for human review. Sending remains disabled.
 
 ## DEX Screener source notes
@@ -74,6 +74,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 - `src/beliquid/scoring.py` — evidence-backed score primitives; unknowns and review flags are handled conservatively.
 - `src/beliquid/review_export.py` — full-batch CSV/JSON review artifacts.
 - `src/beliquid/buying_triggers.py` — validates human-reviewed buying-trigger observations.
+- `src/beliquid/criterion_reviews.py` — validates reviewer assessments against configured criteria.
 - `tests/` — offline tests for models, sources, scoring, qualification, and exports.
 
 ## Data-quality and safety rules
