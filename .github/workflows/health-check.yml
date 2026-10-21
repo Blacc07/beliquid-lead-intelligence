@@ -8,6 +8,8 @@ on:
       - 'src/**'
       - 'tests/**'
       - 'config/**'
+      - 'docs/**'
+      - 'README.md'
       - '.github/workflows/health-check.yml'
   schedule:
     - cron: "0 8 * * *"
