@@ -39,7 +39,7 @@ class ReviewExportTests(unittest.TestCase):
             summary = {"qualification": {"prospects_evaluated": 2}}
             paths = write_review_exports(self.records, summary, output, review_path)
             payload = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))
-            self.assertEqual(payload["schema_version"], 5)
+            self.assertEqual(payload["schema_version"], 6)
             self.assertEqual(payload["records_exported"], 2)
             self.assertEqual(len(payload["records"]), 2)
             first = payload["records"][0]
@@ -130,6 +130,51 @@ class ReviewExportTests(unittest.TestCase):
             self.assertIsNone(first["qualification"]["score_percent"])
             self.assertFalse(first["qualification"]["outreach_enabled"])
             self.assertEqual(payload["buying_trigger_summary"]["verified_trigger_observations"], 1)
+
+    def test_criterion_review_is_exported_and_can_contribute_to_score(self):
+        with tempfile.TemporaryDirectory() as directory:
+            identity_path = Path(directory) / "identity.json"
+            identity_path.write_text('{"reviews":{}}', encoding="utf-8")
+            trigger_path = Path(directory) / "triggers.json"
+            trigger_path.write_text('{"reviews":{}}', encoding="utf-8")
+            criterion_path = Path(directory) / "criteria.json"
+            criterion_path.write_text(json.dumps({"reviews": {
+                "SOLANA:so111": {
+                    "service_fit_and_demonstrated_need": {
+                        "status": "confirmed", "evidence_urls": [URL],
+                        "evidence_timestamps": [TIMESTAMP],
+                        "note": "Reviewed market-quality evidence",
+                    },
+                    "market_activity_and_commercial_potential": {
+                        "status": "not_present", "evidence_urls": [URL],
+                        "evidence_timestamps": [TIMESTAMP],
+                        "note": "Reviewed activity evidence",
+                    },
+                }
+            }}), encoding="utf-8")
+            paths = write_review_exports(
+                self.records, {}, Path(directory) / "out", identity_path, trigger_path, criterion_path
+            )
+            payload = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))
+            first = payload["records"][0]
+            self.assertEqual(first["qualification"]["criteria"][0]["status"], "confirmed")
+            self.assertEqual(first["qualification"]["criteria"][1]["status"], "not_present")
+            self.assertEqual(first["qualification"]["evidence_coverage_percent"], 45)
+            self.assertIsNone(first["qualification"]["score_percent"])
+            self.assertEqual(payload["criterion_review_summary"]["prospects_with_any_criterion_review"], 1)
+            with Path(paths["csv"]).open(encoding="utf-8-sig", newline="") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_status"], "confirmed")
+            self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_evidence_url"], URL)
+            self.assertEqual(rows[0]["review_service_fit_and_demonstrated_need_reviewer_note"], "Reviewed market-quality evidence")
+
+    def test_malformed_criterion_review_fails_export_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            criterion_path = Path(directory) / "criteria.json"
+            criterion_path.write_text('{"reviews":{"solana:abc":{"fake_criterion":{"status":"confirmed"}}}}', encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "unknown criterion"):
+                write_review_exports(self.records, {}, Path(directory) / "out",
+                                     criterion_reviews_path=criterion_path)
 
     def test_malformed_trigger_review_fails_export_closed(self):
         with tempfile.TemporaryDirectory() as directory:
