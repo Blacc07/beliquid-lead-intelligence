@@ -135,10 +135,11 @@ def validate_batch(artifacts_dir: Path, repo_root: Path = Path(".")) -> dict[str
             "outreach_enabled": str(bool(qualification.get("outreach_enabled"))).lower(),
         }
         for field, expected in checks.items():
-            if csv_row.get(field, "") != str(expected):
+            expected_csv = "" if expected is None else str(expected)
+            if csv_row.get(field, "") != expected_csv:
                 raise ValueError(
                     f"CSV/JSON mismatch for {key} field {field}: "
-                    f"{csv_row.get(field, '')!r} != {expected!r}"
+                    f"{csv_row.get(field, '')!r} != {expected_csv!r}"
                 )
             comparisons += 1
         _float_equal(csv_row.get("score_percent", ""), qualification.get("score_percent"), "score_percent", key)
