@@ -13,7 +13,8 @@ class QualificationCriteriaConfigTests(unittest.TestCase):
 
     def test_config_is_explicitly_draft_and_not_live(self):
         self.assertEqual(self.config["status"], "proposed_pilot_baseline")
-        self.assertIn("market-making or liquidity services", self.config["purpose"])\n        self.assertIn("not a BeLiquid-published or sales-validated scorecard", self.config["purpose"])
+        self.assertIn("market-making or liquidity services", self.config["purpose"])
+        self.assertIn("not a BeLiquid-published or sales-validated scorecard", self.config["purpose"])
 
     def test_criteria_have_unique_keys_and_positive_weights_totaling_100(self):
         criteria = self.config["criteria"]
