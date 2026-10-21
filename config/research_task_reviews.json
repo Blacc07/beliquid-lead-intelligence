@@ -1,12 +1,13 @@
 {
   "schema_version": 1,
   "instructions": [
+    "This ledger records automated task executions and evidence-backed outcomes; it does not require human reviewers.",
     "Add one entry per prospect using the case-insensitive chain:contract_address key from the current review batch.",
-    "Within each prospect, key entries by a supported task name and record only work actually completed by a human.",
-    "Every completion requires status completed, reviewer, timezone-aware completed_at, outcome, evidence_urls, matching evidence_timestamps, and input_fingerprint copied from research-queue.json for that exact prospect snapshot.",
-    "Supported outcomes: completed, inconclusive, blocked, needs_follow_up. Completion records task work only; they never change identity, risk, trigger, criterion, score, route, or outreach status.",
-    "If the prospect record changes, the fingerprint no longer matches and the task reopens. Refresh the queue after the underlying review records change.",
-    "Do not use this ledger to resolve manual holds. A completed identity/risk research task with unresolved canonical status routes to human escalation and remains blocked from commercial research.",
+    "Within each prospect, key entries by a supported task name and record only work actually completed by the automation.",
+    "Every completion requires status completed, executor, timezone-aware completed_at, outcome, evidence_urls, matching evidence_timestamps, and input_fingerprint copied from research-queue.json for that exact prospect snapshot.",
+    "Supported outcomes: completed, inconclusive, blocked, needs_follow_up. Completion records task execution only; they never by themselves change identity, risk, trigger, criterion, score, route, clearance, or outreach status.",
+    "If the prospect record changes, the fingerprint no longer matches and the task reopens. Refresh the queue after underlying research records change.",
+    "Identity/risk unknowns do not stop commercial research after the identity/risk task has run, but remain unresolved and excluded from the cleared list. Mismatches or risk concerns remain held.",
     "Evidence URLs must be HTTP(S), timestamps ISO 8601 with an explicit timezone. Do not add secrets or private credentials."
   ],
   "reviews": {}
