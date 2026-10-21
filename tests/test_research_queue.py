@@ -85,7 +85,7 @@ class ResearchQueueTests(unittest.TestCase):
         self.assertEqual(item["task"], "investigate_market_quality")
 
     def test_completed_identity_research_does_not_clear_unknown_status(self):
-        row = prospect("Unknown")
+        row = prospect("Unknown", priority="high")
         ledger = {"schema_version": 1, "reviews": {"ethereum:" + row["contract_address"]: {
             "verify_identity_and_risk": completion(row, "verify_identity_and_risk")}}}
         item = build_research_queue({"records": [row]}, ledger)["tasks"][0]
