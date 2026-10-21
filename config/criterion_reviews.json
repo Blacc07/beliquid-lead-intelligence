@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "instructions": [
+    "Add one entry per prospect using a chain:contract key.",
+    "Within each prospect, add only criteria that have been reviewed, keyed by the exact criterion key from config/qualification_criteria.json.",
+    "Each criterion status must be confirmed, not_present, or unknown. Confirmed means evidence supports the criterion definition; not_present means evidence reviewed does not support it. Use unknown when evidence is insufficient.",
+    "confirmed and not_present require evidence_urls and evidence_timestamps arrays with the same non-zero length. URLs must be absolute HTTP(S), and timestamps must be ISO 8601 with a timezone.",
+    "A buying-trigger record does not automatically confirm buying_trigger_and_timing. The reviewer must assess the criterion definition and cite evidence.",
+    "Criterion weights are loaded from config/qualification_criteria.json; do not include or override weights here.",
+    "Risk flags and manual holds remain independent of the score. No automated outreach is enabled.",
+    "This is a human-review input. Do not add secrets or private credentials."
+  ],
+  "reviews": {}
+}
