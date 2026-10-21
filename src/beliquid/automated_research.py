@@ -182,6 +182,7 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
         "trigger_candidates": [],
         "criterion_evidence_candidates": [],
         "identity_status": "unknown",
+        "identity_candidate_assessment": {"status": "unresolved", "candidate_match_score": 0.0, "score_is_probability": False, "signals": [], "conflicts": [], "source_urls": [candidate] if candidate else [], "observed_at": observed_at},
         "risk_status": "unknown",
         "qualification_status": "not_assessed",
         "outreach_enabled": False,
@@ -221,6 +222,38 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
             triggers.append({"term": term, "status": "candidate_only", "excerpt": excerpt, "evidence_url": final_url, "observed_at": observed_at})
     contract = str(record.get("contract_address") or "").strip()
     contract_mentioned = bool(contract and contract.casefold() in page_text.casefold())
+    project_name = str(record.get("project_name") or "").strip()
+    token_symbol = str(record.get("token_symbol") or "").strip()
+    metadata_text = " ".join((page.get("page_title", ""), page.get("og_site_name", ""), page.get("meta_description", ""), page_text)).casefold()
+    name_match = bool(project_name and project_name.casefold() in metadata_text)
+    symbol_match = bool(token_symbol and re.search(rf"(?<![a-z0-9]){re.escape(token_symbol.casefold())}(?![a-z0-9])", metadata_text))
+    account_hosts = ("x.com", "twitter.com", "github.com", "discord.com", "discord.gg", "t.me", "telegram.me", "linkedin.com", "youtube.com", "medium.com")
+    account_links = [item["url"] for item in links if any((urlparse(item["url"]).hostname or "").casefold() == host or (urlparse(item["url"]).hostname or "").casefold().endswith("." + host) for host in account_hosts)]
+    signals = []
+    if contract_mentioned:
+        signals.append({"type": "contract_address_mentioned", "weight": 0.4})
+    if symbol_match:
+        signals.append({"type": "token_symbol_match", "weight": 0.25})
+    if name_match:
+        signals.append({"type": "project_name_match", "weight": 0.2})
+    if account_links:
+        signals.append({"type": "public_account_link_candidates", "weight": 0.1, "count": len(account_links)})
+    if page.get("page_title") or page.get("og_site_name"):
+        signals.append({"type": "page_brand_metadata_present", "weight": 0.05})
+    confidence = round(min(1.0, sum(float(item["weight"]) for item in signals)), 2)
+    conflicts = []
+    if (project_name or token_symbol) and not name_match and not symbol_match:
+        conflicts.append({"type": "candidate_name_or_symbol_not_matched", "severity": "review", "note": "The candidate page did not contain the supplied project name or token symbol; this is a possible mismatch, not proof of a wrong identity."})
+    identity_assessment = {
+        "status": "unresolved",
+        "candidate_match_score": confidence,
+        "score_is_probability": False,
+        "signals": signals,
+        "conflicts": conflicts,
+        "source_urls": [final_url] + account_links,
+        "observed_at": observed_at,
+        "note": "Heuristic candidate-match score only; this does not verify official identity or change canonical identity status.",
+    }
     output.update({
         "fetch_status": "success",
         "page": {
@@ -232,6 +265,7 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
             "text_excerpt": page_text[:MAX_TEXT],
             "contract_address_mentioned": contract_mentioned,
         },
+        "identity_candidate_assessment": identity_assessment,
         "source_candidates": [{"url": final_url, "source_type": "candidate_project_website", "observed_at": observed_at}]
             + [{"url": item["url"], "source_type": "outbound_link_candidate", "label": item["label"], "observed_at": observed_at} for item in links],
         "feed_candidates": feed_candidates,
