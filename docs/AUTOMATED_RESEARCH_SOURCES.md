@@ -6,6 +6,7 @@
 |---|---|---|---|---|
 | DEX Screener discovery/enrichment | Candidate token profiles, chain/contract metadata, pool and market observations | No key configured by this repository | HTTP errors are surfaced by the existing source module; provider limits may change and must be checked against current DEX Screener documentation | Official identity, buying intent, safety, or qualification |
 | Candidate project homepage collector | Bounded HTML metadata, page text excerpt, outbound link candidates, keyword-trigger candidates | No key | Public HTTP(S) URLs only; 8-second timeout; 1 MB body limit; at most 40 links and 20,000 characters of text; fetch failures are explicit and leave statuses unknown | That the candidate homepage is official, that keyword matches are verified events, or that a criterion is satisfied |
+| Linked RSS/Atom trigger feeds | Dated event candidates from RSS/Atom feeds explicitly linked by candidate project pages; matches project name, symbol, or contract against trigger-related titles/summaries | No key for the project-linked feeds | Up to 2 feeds per prospect; 8-second timeout; 1 MB response limit; at most 100 entries/feed; 6 concurrent workers; fetch failures stay explicit | Verified buying intent, authoritative event attribution, or complete news coverage |
 | GoPlus Token Security API | Contract-level security flags for configured EVM chain IDs | No API key is configured; public endpoint is used | 8-second timeout; response capped at 1 MB; up to 3 attempts for transient network and HTTP 408/425/429/5xx failures; unsupported chains, missing reports, provider errors, and request failures are distinct outcomes | Global risk clearance, project reputation, source completeness, or identity verification |
 
 ## GoPlus coverage
@@ -18,7 +19,7 @@ A high-severity provider finding creates an automated hold in the research queue
 
 ## Pipeline and task behavior
 
-- `automated-research.json` and `security-research.json` are generated independently from the canonical prospect review export.
+- `automated-research.json`, `trigger-research.json`, and `security-research.json` are generated independently from the canonical prospect review export.
 - The research queue consumes the security output and routes a reported high-severity finding to an automated hold before commercial research.
 - The queue does not convert source results into canonical identity verification or a clean risk review.
 - Qualification still uses the existing six criteria and configured 60% evidence-coverage threshold. Candidate keywords and security flags do not automatically confirm criteria or generate a score.
@@ -27,6 +28,6 @@ A high-severity provider finding creates an automated hold in the research queue
 
 ## Remaining limitations
 
-This is an initial independent contract-risk integration, not a complete security or reputation engine. There is not yet broad chain coverage, multiple independent security vendors, automated reputational/news-source corroboration, a canonical identity cross-match against official contract announcements, structured feed ingestion for dated buying triggers, or automated criterion-level evidence assessment across all six criteria. Public-page keyword matches remain candidates only. Criterion-level evidence assessment across all six criteria remains incomplete. No failed call should be represented as a completed task.
+This is an initial independent contract-risk integration, not a complete security or reputation engine. There is not yet broad chain coverage, multiple independent security vendors, comprehensive reputational/news-source coverage, a canonical identity cross-match against official contract announcements, comprehensive buying-trigger coverage beyond feeds linked by candidate project pages, or automated criterion-level evidence assessment across all six criteria. Public-page keyword matches remain candidates only. Criterion-level evidence assessment across all six criteria remains incomplete. No failed call should be represented as a completed task.
 
 Provider rate limits and terms can change. The adapter uses bounded retries for transient failures but does not assume a fixed request quota. If GoPlus returns rate limiting or provider errors, the output preserves the failure state and does not mark the prospect clear. No credentials are currently required by this adapter; any future keyed providers should use GitHub Actions secrets and must never write credentials into artifacts or logs.
