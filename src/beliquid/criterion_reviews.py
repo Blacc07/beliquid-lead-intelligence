@@ -49,7 +49,7 @@ def load_criterion_reviews(
             if unexpected:
                 raise ValueError(f"unsupported fields for criterion {criterion!r}: {', '.join(sorted(unexpected))}")
             status = raw.get("status", "unknown")
-            if status not in ALLOWED_STATUSES:
+            if not isinstance(status, str) or status not in ALLOWED_STATUSES:
                 raise ValueError(f"invalid status for criterion {criterion!r}; expected unknown, confirmed, or not_present")
             urls = raw.get("evidence_urls", [])
             timestamps = raw.get("evidence_timestamps", [])
