@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 from html.parser import HTMLParser
 import ipaddress
 import json
@@ -144,12 +145,34 @@ def fetch_page(url: str, timeout: float = TIMEOUT_SECONDS, opener=None) -> dict[
     return result
 
 
+
+def _record_fingerprint(record: dict[str, Any]) -> str:
+    stable = {name: record.get(name) for name in ("project_name", "token_symbol", "chain", "contract_address", "website_url_candidate")}
+    canonical = json.dumps(stable, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _within_cache_ttl(observed_at: Any, ttl_hours: float, now: datetime) -> bool:
+    if not isinstance(observed_at, str):
+        return False
+    try:
+        stamp = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if stamp.tzinfo is None or stamp.utcoffset() is None:
+        return False
+    age = (now - stamp.astimezone(timezone.utc)).total_seconds()
+    return 0 <= age <= ttl_hours * 3600
+
+
 def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[[str], dict[str, Any]] = fetch_page) -> dict[str, Any]:
     candidate = record.get("website_url_candidate")
     output: dict[str, Any] = {
         "project_name": record.get("project_name", ""),
         "chain": record.get("chain", ""),
         "contract_address": record.get("contract_address", ""),
+        "input_fingerprint": _record_fingerprint(record),
+        "reused_from_cache": False,
         "candidate_website_url": candidate,
         "observed_at": observed_at,
         "fetch_status": "not_attempted",
@@ -225,12 +248,27 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
     return output
 
 
-def collect_research(payload: dict[str, Any], observed_at: str | None = None, fetcher: Callable[[str], dict[str, Any]] = fetch_page) -> dict[str, Any]:
+def collect_research(payload: dict[str, Any], observed_at: str | None = None, fetcher: Callable[[str], dict[str, Any]] = fetch_page, previous_payload: dict[str, Any] | None = None, cache_ttl_hours: float = 24) -> dict[str, Any]:
     records = payload.get("records")
     if not isinstance(records, list):
         raise ValueError("prospect-review input must contain a records list")
     timestamp = observed_at or datetime.now(timezone.utc).isoformat()
-    results = [research_record(record, timestamp, fetcher) for record in records]
+    now = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+    previous_records = previous_payload.get("records", []) if isinstance(previous_payload, dict) else []
+    previous_by_key = {f"{str(item.get('chain') or '').casefold()}:{str(item.get('contract_address') or '').casefold()}": item for item in previous_records if isinstance(item, dict)}
+    results = []
+    for record in records:
+        key = f"{str(record.get('chain') or '').casefold()}:{str(record.get('contract_address') or '').casefold()}"
+        cached = previous_by_key.get(key)
+        fingerprint = _record_fingerprint(record)
+        if (cached and cached.get("input_fingerprint") == fingerprint
+                and cached.get("fetch_status") in {"success", "no_website_candidate"}
+                and _within_cache_ttl(cached.get("observed_at"), cache_ttl_hours, now)):
+            reused = dict(cached)
+            reused["reused_from_cache"] = True
+            results.append(reused)
+        else:
+            results.append(research_record(record, timestamp, fetcher))
     return {
         "schema_version": 1,
         "source": "candidate public project websites",
@@ -238,6 +276,8 @@ def collect_research(payload: dict[str, Any], observed_at: str | None = None, fe
         "records_with_page_fetched": sum(item["fetch_status"] == "success" for item in results),
         "records_without_website_candidate": sum(item["fetch_status"] == "no_website_candidate" for item in results),
         "records_with_fetch_failures": sum(item["fetch_status"] == "fetch_failed" for item in results),
+        "records_reused_from_cache": sum(bool(item.get("reused_from_cache")) for item in results),
+        "cache_ttl_hours": cache_ttl_hours,
         "identity_or_risk_status_changed": False,
         "qualification_scores_changed": False,
         "outreach_enabled": False,
@@ -246,11 +286,12 @@ def collect_research(payload: dict[str, Any], observed_at: str | None = None, fe
     }
 
 
-def write_research(input_path: Path, output_path: Path) -> dict[str, Any]:
+def write_research(input_path: Path, output_path: Path, previous_path: Path | None = None, cache_ttl_hours: float = 24) -> dict[str, Any]:
     payload = json.loads(input_path.read_text(encoding="utf-8"))
+    previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path and previous_path.is_file() else None
     if not isinstance(payload, dict):
         raise ValueError("prospect-review input must be a JSON object")
-    result = collect_research(payload)
+    result = collect_research(payload, previous_payload=previous, cache_ttl_hours=cache_ttl_hours)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return {key: result[key] for key in ("records_exported", "records_with_page_fetched", "records_without_website_candidate", "records_with_fetch_failures", "outreach_enabled")}
@@ -260,9 +301,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=Path("artifacts/prospect-review.json"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/automated-research.json"))
+    parser.add_argument("--previous", type=Path, default=Path(".cache/research-state/automated-research.json"))
+    parser.add_argument("--cache-ttl-hours", type=float, default=24)
     args = parser.parse_args()
     try:
-        print(json.dumps(write_research(args.input, args.output), indent=2, sort_keys=True))
+        print(json.dumps(write_research(args.input, args.output, args.previous, args.cache_ttl_hours), indent=2, sort_keys=True))
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(json.dumps({"status": "failure", "error": str(exc)}, indent=2))
         return 1
