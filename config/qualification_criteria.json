@@ -1,8 +1,8 @@
 {
-  "schema_version": 1,
-  "name": "BeLiquid initial liquidity-service prospect qualification",
-  "status": "approved_baseline_for_liquidity_services",
-  "purpose": "Apply BeLiquid's approved baseline for qualifying prospects specifically for liquidity-related services. This does not establish that liquidity services are a current business priority for all BeLiquid sales activity.",
+  "schema_version": 2,
+  "name": "BeLiquid market-making and liquidity-services prospect qualification",
+  "status": "proposed_pilot_baseline",
+  "purpose": "Prioritize credible token projects where public evidence suggests a plausible need for BeLiquid's crypto market-making or liquidity services. This is a testable starting hypothesis, not a BeLiquid-published or sales-validated scorecard.",
   "minimum_evidence_coverage_percent": 60,
   "rules": {
     "unknown_is_not_zero": true,
@@ -17,102 +17,100 @@
   },
   "criteria": [
     {
-      "key": "explicit_liquidity_need",
-      "label": "Explicit liquidity need or initiative",
-      "weight": 30,
-      "positive_definition": "An official project source explicitly describes a liquidity initiative, liquidity-provider search, market-making request, or comparable need relevant to BeLiquid's actual services.",
+      "key": "service_fit_and_demonstrated_need",
+      "label": "Service fit and demonstrated need",
+      "weight": 25,
+      "positive_definition": "Verifiable evidence indicates a plausible need for professional market making or liquidity services, such as shallow order-book depth, wide spreads, high slippage, fragmented liquidity, or an explicit liquidity initiative. Market metrics are diagnostic evidence, not proof of buying intent by themselves.",
       "evidence_examples": [
-        "official project announcement",
-        "official documentation",
-        "verified team statement"
+        "measured spread or depth from a named venue and observation time",
+        "documented slippage or liquidity fragmentation analysis",
+        "official project statement seeking liquidity or market-making support"
       ],
-      "not_enough_on_its_own": [
-        "low liquidity",
-        "high volume",
-        "price movement",
-        "token promotion"
-      ],
-      "unknown_when": "No reliable public evidence confirms or rules out a relevant initiative."
+      "unknown_when": "No reliable market-quality observation or explicit initiative has been reviewed. Do not infer a need from token age, volume, price movement, or promotion alone."
     },
     {
-      "key": "active_product_or_protocol",
-      "label": "Active product or protocol",
+      "key": "market_activity_and_commercial_potential",
+      "label": "Market activity and commercial potential",
       "weight": 20,
-      "positive_definition": "A project has a verifiable product, protocol, application, or documented launch activity beyond a token profile alone.",
+      "positive_definition": "Available, timestamped data supports meaningful and sufficiently consistent trading activity, relevant venue coverage, and a plausible service opportunity. Interpret volume alongside liquidity, depth, venue count, and activity consistency; volume alone is not a lead-quality score.",
       "evidence_examples": [
-        "official product documentation",
-        "working application or protocol page",
-        "official release notes"
+        "timestamped trading volume and liquidity observations from identified pools or exchanges",
+        "order-book depth and spread snapshots for named trading pairs",
+        "time-series observations showing activity consistency"
       ],
-      "unknown_when": "The product's existence or current activity cannot be verified from available sources."
+      "unknown_when": "Market metrics are missing, stale, incomparable across venues, or based only on a single uncontextualized volume observation."
     },
     {
-      "key": "recent_business_trigger",
-      "label": "Recent, verifiable business trigger",
+      "key": "buying_trigger_and_timing",
+      "label": "Buying trigger and timing",
+      "weight": 20,
+      "positive_definition": "A dated and verifiable event plausibly creates a timely liquidity-services discussion, such as an upcoming TGE or launch, announced CEX listing, new exchange pair, venue expansion, or documented market-quality issue.",
+      "evidence_examples": [
+        "official dated launch or TGE announcement",
+        "exchange or project announcement of a listing or new pair",
+        "dated evidence of a material market-quality issue"
+      ],
+      "unknown_when": "No reliable dated trigger has been verified. Treat milestones as a reason to research, not automatic proof of buying intent."
+    },
+    {
+      "key": "project_credibility_and_team_access",
+      "label": "Project credibility and team access",
       "weight": 15,
-      "positive_definition": "A recent official announcement indicates a launch, exchange or chain expansion, ecosystem partnership, major product release, or another event plausibly relevant to liquidity services.",
+      "positive_definition": "Project and token identity are cross-verified with credible sources, the project shows verifiable operating activity, and an appropriate public business contact or decision-maker path is available.",
       "evidence_examples": [
-        "official dated announcement",
-        "official release notes",
-        "official ecosystem announcement"
+        "official website and documentation cross-checked against a credible ecosystem or exchange source",
+        "contract address confirmed by an official project source",
+        "official business contact, team page, or public partnerships contact"
       ],
-      "not_enough_on_its_own": [
-        "undated social chatter",
-        "price spike",
-        "paid token boost"
-      ],
-      "unknown_when": "No reliable dated source was found or source freshness cannot be established."
+      "unknown_when": "The contract, chain, official domain, project status, or legitimate business contact route is ambiguous or supported only by an unverified token profile."
     },
     {
-      "key": "official_identity_verified",
-      "label": "Official project identity verified",
-      "weight": 15,
-      "positive_definition": "A project-owned website or official documentation is identified and can be cross-checked against at least one other credible project-controlled or ecosystem source.",
-      "evidence_examples": [
-        "official website",
-        "official docs",
-        "ecosystem directory linking to the project"
-      ],
-      "unknown_when": "Only an unverified token profile, social link, or ambiguous domain is available."
-    },
-    {
-      "key": "decision_maker_path",
-      "label": "Public, legitimate decision-maker path",
+      "key": "growth_and_strategic_potential",
+      "label": "Growth and strategic potential",
       "weight": 10,
-      "positive_definition": "A public business contact route or clearly identified team/business-development role is available from an official source.",
+      "positive_definition": "Credible evidence supports relevant growth, such as product development, ecosystem expansion, sustained community participation, new integrations, or a strategic milestone that could increase the value of professional liquidity support.",
       "evidence_examples": [
-        "official business contact page",
-        "official team page",
-        "public BD or partnerships contact"
+        "official product releases or roadmap milestones",
+        "credible ecosystem integrations or expansion announcements",
+        "dated and attributable community or project activity"
       ],
-      "not_enough_on_its_own": [
-        "guessed email addresses",
-        "private personal data",
-        "unverified scraped identities"
-      ],
-      "unknown_when": "No official, appropriate business contact route can be verified."
+      "unknown_when": "Growth claims are promotional, undated, uncorroborated, or cannot be distinguished from paid boosting."
     },
     {
-      "key": "evidence_freshness",
-      "label": "Evidence is current enough to act on",
+      "key": "security_and_reputational_integrity",
+      "label": "Security and reputational integrity",
       "weight": 10,
-      "positive_definition": "The key business trigger and project activity are supported by dated evidence within a configurable review window; default window is 180 days.",
+      "positive_definition": "A proportionate review finds no material unresolved identity, contract, market-integrity, security, or reputational concern in the evidence reviewed. This criterion does not replace independent risk flags or a manual hold.",
       "evidence_examples": [
-        "dated official announcement",
-        "recent official release notes",
-        "dated project update"
+        "contract and chain identity cross-checks from authoritative sources",
+        "relevant token-security or contract-review results with source and timestamp",
+        "reputable sources checked for material project-integrity concerns"
       ],
-      "unknown_when": "Evidence has no date, cannot be checked, or is outside the review window without a current corroborating source."
+      "unknown_when": "No proportionate review has been completed, security data is unavailable, or material concerns remain unresolved. Unknown must not be interpreted as safe."
     }
   ],
   "review_flags": [
     "official_identity_unverified",
     "conflicting_project_identity",
     "potential_impersonation_or_scam",
+    "contract_or_security_concern",
+    "market_integrity_concern",
     "evidence_outdated",
     "possible_regulatory_or_reputational_risk",
     "unclear_service_fit"
   ],
-  "review_policy": "A review flag requires human review regardless of score. A high score does not override risk flags.",
-  "approval_note": "The user approved these weights and definitions as the starting baseline for liquidity-related services. Confirm service priority before reusing this score as a general BeLiquid sales-fit score."
+  "review_policy": "Risk flags are evaluated independently from the numeric score. A critical or unresolved identity, security, or integrity concern places the prospect on manual hold regardless of score. Do not recommend outreach while a hold is active.",
+  "trigger_labels": [
+    "verified",
+    "inferred",
+    "unknown"
+  ],
+  "action_routes": [
+    "research",
+    "nurture",
+    "business_development_review",
+    "manual_hold",
+    "reject"
+  ],
+  "approval_note": "Proposed weights and definitions derived from the BeLiquid-specific business-development workflow supplied for this project. Validate against a manually reviewed sample and eventual sales outcomes before treating the score as predictive."
 }
