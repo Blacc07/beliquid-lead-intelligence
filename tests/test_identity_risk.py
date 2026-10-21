@@ -72,6 +72,10 @@ class IdentityRiskAssessmentTests(unittest.TestCase):
                 identity_observed_at=TIMESTAMP,
             )
 
+    def test_unknown_status_rejects_malformed_optional_evidence(self):
+        with self.assertRaisesRegex(ValueError, "HTTP"):
+            IdentityRiskAssessment(identity_status="unknown", identity_evidence_url="javascript:bad")
+
     def test_loads_review_records_and_matches_case_insensitively(self):
         payload = {"reviews": {"SOLANA:So111": {
             "identity_status": "mismatch", "identity_evidence_url": URL,
