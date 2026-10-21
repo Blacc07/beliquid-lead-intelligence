@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+import math
 import re
 from typing import Mapping
 from urllib.parse import urlparse
@@ -33,8 +34,7 @@ def _host(value: str | None) -> str:
 
 def _slug(value: str) -> str:
     value = value.strip().casefold()
-    value = re.sub(r"[^\w]+", "-", value, flags=re.UNICODE).strip("-")
-    return value
+    return re.sub(r"[^\w]+", "-", value, flags=re.UNICODE).strip("-")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,6 +50,8 @@ class Evidence:
     def __post_init__(self) -> None:
         if not self.source_name.strip():
             raise ValueError("source_name cannot be empty")
+        if not self.source_url or not self.source_url.strip():
+            raise ValueError("source_url must be a valid http(s) URL")
         url = _validated_http_url(self.source_url, "source_url")
         object.__setattr__(self, "source_url", url)
         try:
@@ -94,8 +96,8 @@ class ProspectRecord:
             if value is not None:
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     raise ValueError(f"metric {key!r} must be a number or None")
-                if value < 0:
-                    raise ValueError(f"metric {key!r} cannot be negative")
+                if not math.isfinite(value) or value < 0:
+                    raise ValueError(f"metric {key!r} must be finite and non-negative")
             clean_metrics[key.strip()] = value
         object.__setattr__(self, "metrics", clean_metrics)
         object.__setattr__(self, "evidence", tuple(self.evidence))
@@ -111,4 +113,5 @@ class ProspectRecord:
             return f"contract:{chain_key}:{address}"
         name_key = _slug(self.project_name)
         host_key = _host(self.website_url)
-        return f"project:{name_key}:{host_key}" if host_key else f"project:{name_key}"
+        # Keep chain in fallback identity to avoid merging unrelated deployments.
+        return f"project:{chain_key}:{name_key}:{host_key}" if host_key else f"project:{chain_key}:{name_key}"
