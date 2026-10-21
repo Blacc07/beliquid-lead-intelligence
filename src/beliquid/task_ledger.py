@@ -117,6 +117,7 @@ def build_task_ledger(
         "schema_version": 1,
         "generated_at": now,
         "executor": "automated-research-pipeline",
+        "outreach_enabled": False,
         "records_with_task_completions": len(ledger),
         "task_completion_counts": {
             task: sum(task in entries for entries in ledger.values())
