@@ -35,6 +35,11 @@ def _record_dict(
 ) -> dict[str, Any]:
     reviewed_criteria = assessments_for_prospect(record.chain, record.contract_address, criterion_reviews)
     qualification = qualify_discovered_record(record, config, reviewed_criteria)
+    for criterion_report in qualification.get("criteria", []):
+        criterion_key = criterion_report.get("criterion")
+        review = reviewed_criteria.get(criterion_key, {})
+        criterion_report["reviewer_note"] = review.get("note")
+        criterion_report["reviewer_review_flag"] = review.get("review_flag")
     identity_risk = assessment_for_prospect(record.chain, record.contract_address, identity_risk_reviews)
     buying_triggers = trigger_assessment_for_prospect(record.chain, record.contract_address, buying_trigger_reviews)
     market_research_priority = prioritize_market_research(dict(record.metrics))
