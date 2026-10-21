@@ -11,14 +11,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from beliquid.identity_risk import assessment_for_prospect, load_identity_risk_reviews
+from beliquid.identity_risk import assessment_for_prospect, load_identity_risk_reviews, prospect_review_key
 from beliquid.models import ProspectRecord
 from beliquid.qualification import load_criteria_config, qualify_discovered_record
 
 
-def _record_dict(record: ProspectRecord, config: dict[str, Any]) -> dict[str, Any]:
+def _record_dict(record: ProspectRecord, config: dict[str, Any], identity_risk_reviews: dict[str, Any]) -> dict[str, Any]:
     qualification = qualify_discovered_record(record, config)
-    identity_risk = assessment_for_prospect(record.chain, record.contract_address, _IDENTITY_RISK_REVIEWS)
+    identity_risk = assessment_for_prospect(record.chain, record.contract_address, identity_risk_reviews)
     has_website = bool(record.website_url)
     # These are research queues, not qualification judgments or exclusions.
     triage_bucket = (
@@ -65,7 +65,7 @@ def write_review_exports(
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     config = load_criteria_config()
-    global _IDENTITY_RISK_REVIEWS\n    _IDENTITY_RISK_REVIEWS = load_identity_risk_reviews()\n    rows = [_record_dict(record, config) for record in records]
+    identity_risk_reviews = load_identity_risk_reviews()\n    rows = [_record_dict(record, config, identity_risk_reviews) for record in records]
 
     json_path = destination / "prospect-review.json"
     csv_path = destination / "prospect-review.csv"
