@@ -24,6 +24,10 @@ TIMEOUT_SECONDS = 8
 MAX_BYTES = 1_000_000
 MAX_FEEDS_PER_PROSPECT = 2
 MAX_ENTRIES_PER_FEED = 100
+GLOBAL_NEWS_FEEDS = [
+    {"url": "https://www.coindesk.com/arc/outboundfeeds/rss/?outputType=xml", "provider": "CoinDesk"},
+    {"url": "https://cointelegraph.com/rss", "provider": "Cointelegraph"},
+]
 MAX_WORKERS = 6
 TRIGGER_CACHE_VERSION = 2
 TRIGGER_TERMS = {
@@ -117,30 +121,30 @@ def _classify_trigger(text: str) -> str | None:
     return None
 
 
-def research_feed(record: dict[str, Any], feed_url: str, observed_at: str, fetcher=fetch_feed) -> dict[str, Any]:
+def _match_feed_payload(record: dict[str, Any], feed_url: str, feed: dict[str, Any], observed_at: str, reused_from_cache: bool = False, source_scope: str = "project_linked", provider: str | None = None) -> dict[str, Any]:
     base = {
         "cache_version": TRIGGER_CACHE_VERSION,
         "project_name": record.get("project_name", ""),
         "chain": record.get("chain", ""),
         "contract_address": record.get("contract_address", ""),
         "feed_url": feed_url,
+        "final_feed_url": feed.get("feed_url") or feed_url,
+        "provider": provider or feed.get("provider") or "candidate project feed",
+        "source_scope": source_scope,
         "observed_at": observed_at,
-        "fetch_status": "not_attempted",
-        "entries_checked": 0,
+        "fetch_status": "success",
+        "entries_checked": len(feed.get("entries", [])),
+        "undated_matches": 0,
         "trigger_candidates": [],
+        "reused_from_cache": reused_from_cache,
         "outreach_enabled": False,
     }
-    try:
-        feed = fetcher(feed_url)
-    except (HTTPError, URLError, TimeoutError, OSError, ValueError, ET.ParseError) as exc:
-        base.update(fetch_status="fetch_failed", error_type=type(exc).__name__)
-        return base
-
     name = str(record.get("project_name") or "").strip().casefold()
     symbol = str(record.get("token_symbol") or "").strip().casefold()
     contract = str(record.get("contract_address") or "").strip().casefold()
     entities = [value for value in (name, symbol, contract) if len(value) >= 4]
     candidates = []
+    undated = 0
     for entry in feed.get("entries", [])[:MAX_ENTRIES_PER_FEED]:
         title = str(entry.get("title") or "")
         summary = str(entry.get("summary") or "")
@@ -150,6 +154,9 @@ def research_feed(record: dict[str, Any], feed_url: str, observed_at: str, fetch
             continue
         trigger_type = _classify_trigger(text)
         if not trigger_type:
+            continue
+        if not entry.get("published_at"):
+            undated += 1
             continue
         event_url = urljoin(feed.get("feed_url") or feed_url, str(entry.get("url") or ""))
         parsed_url = urlparse(event_url)
@@ -162,20 +169,36 @@ def research_feed(record: dict[str, Any], feed_url: str, observed_at: str, fetch
             "summary_excerpt": summary[:1000],
             "event_url": event_url,
             "feed_url": feed.get("feed_url") or feed_url,
+            "provider": provider or feed.get("provider") or "candidate project feed",
+            "source_scope": source_scope,
             "published_at": entry.get("published_at"),
             "observed_at": observed_at,
-            "date_verified": bool(entry.get("published_at")),
-            "note": "Feed item matched project metadata and a trigger term; event attribution/date still require corroboration.",
+            "date_verified": True,
+            "note": "Dated feed item matched project metadata and a trigger term; event attribution still requires corroboration.",
         })
-    base.update(
-        fetch_status="success",
-        final_feed_url=feed.get("feed_url") or feed_url,
-        entries_checked=len(feed.get("entries", [])),
-        trigger_candidates=candidates,
-        research_note="Dated feed matches are source-backed candidates only; they do not create verified buying-trigger reviews.",
-    )
+    base.update(undated_matches=undated, trigger_candidates=candidates)
     return base
 
+
+def research_feed(record: dict[str, Any], feed_url: str, observed_at: str, fetcher=fetch_feed) -> dict[str, Any]:
+    try:
+        feed = fetcher(feed_url)
+    except (HTTPError, URLError, TimeoutError, OSError, ValueError, ET.ParseError) as exc:
+        return {
+            "cache_version": TRIGGER_CACHE_VERSION,
+            "project_name": record.get("project_name", ""),
+            "chain": record.get("chain", ""),
+            "contract_address": record.get("contract_address", ""),
+            "feed_url": feed_url,
+            "observed_at": observed_at,
+            "fetch_status": "fetch_failed",
+            "error_type": type(exc).__name__,
+            "entries_checked": 0,
+            "trigger_candidates": [],
+            "reused_from_cache": False,
+            "outreach_enabled": False,
+        }
+    return _match_feed_payload(record, feed_url, feed, observed_at)
 
 
 def _within_cache_ttl(observed_at: Any, ttl_hours: float, now: datetime) -> bool:
@@ -191,7 +214,7 @@ def _within_cache_ttl(observed_at: Any, ttl_hours: float, now: datetime) -> bool
     return 0 <= age <= ttl_hours * 3600
 
 
-def collect_trigger_research(prospect_payload: dict[str, Any], public_research: dict[str, Any], observed_at: str | None = None, fetcher=fetch_feed, previous_payload: dict[str, Any] | None = None, cache_ttl_hours: float = 24) -> dict[str, Any]:
+def collect_trigger_research(prospect_payload: dict[str, Any], public_research: dict[str, Any], observed_at: str | None = None, fetcher=fetch_feed, previous_payload: dict[str, Any] | None = None, cache_ttl_hours: float = 24, global_feeds: list[dict[str, str]] | None = None) -> dict[str, Any]:
     prospects = prospect_payload.get("records")
     public_records = public_research.get("records")
     if not isinstance(prospects, list) or not isinstance(public_records, list):
@@ -200,9 +223,10 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
     now = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
     prior_records = previous_payload.get("records", []) if isinstance(previous_payload, dict) else []
     prior_by_key = {f"{str(item.get('chain') or '').casefold()}:{str(item.get('contract_address') or '').casefold()}": item for item in prior_records if isinstance(item, dict)}
+    prior_global = {item.get("feed_url"): item for item in (previous_payload.get("global_feed_results", []) if isinstance(previous_payload, dict) else []) if isinstance(item, dict)}
     prospect_map = {f"{str(r.get('chain') or '').casefold()}:{str(r.get('contract_address') or '').casefold()}": r for r in prospects if isinstance(r, dict)}
-    jobs = []
-    cached_results = []
+    project_jobs = []
+    cached_project_results = []
     for public in public_records:
         if not isinstance(public, dict):
             continue
@@ -210,63 +234,118 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
         prospect = prospect_map.get(key)
         if not prospect:
             continue
-        feeds = public.get("feed_candidates") or []
         prior = prior_by_key.get(key, {})
-        prior_feeds = {item.get("feed_url"): item for item in prior.get("feed_results", []) if isinstance(item, dict)}
-        for feed in feeds[:MAX_FEEDS_PER_PROSPECT]:
+        prior_feeds = {item.get("feed_url"): item for item in prior.get("feed_results", []) if isinstance(item, dict) and item.get("source_scope", "project_linked") == "project_linked"}
+        for feed in (public.get("feed_candidates") or [])[:MAX_FEEDS_PER_PROSPECT]:
             if not isinstance(feed, dict) or not isinstance(feed.get("url"), str):
                 continue
             cached = prior_feeds.get(feed["url"])
             if cached and cached.get("cache_version") == TRIGGER_CACHE_VERSION and cached.get("fetch_status") == "success" and _within_cache_ttl(cached.get("observed_at"), cache_ttl_hours, now):
                 item = dict(cached)
                 item["reused_from_cache"] = True
-                cached_results.append(item)
+                cached_project_results.append(item)
             else:
-                jobs.append((prospect, feed["url"]))
-    def run(job):
+                project_jobs.append((prospect, feed["url"]))
+
+    configured_global_feeds = GLOBAL_NEWS_FEEDS if global_feeds is None else global_feeds
+    global_jobs = []
+    cached_global_results = []
+    for feed in configured_global_feeds:
+        url = feed.get("url")
+        if not isinstance(url, str):
+            continue
+        cached = prior_global.get(url)
+        if cached and cached.get("cache_version") == TRIGGER_CACHE_VERSION and cached.get("fetch_status") == "success" and _within_cache_ttl(cached.get("observed_at"), cache_ttl_hours, now):
+            item = dict(cached)
+            item["reused_from_cache"] = True
+            cached_global_results.append(item)
+        else:
+            global_jobs.append(feed)
+
+    def run_project(job):
         item = research_feed(job[0], job[1], timestamp, fetcher)
         item["reused_from_cache"] = False
+        item["source_scope"] = "project_linked"
         return item
+
+    def run_global(feed):
+        url = feed["url"]
+        try:
+            fetched = fetcher(url)
+            return {
+                "cache_version": TRIGGER_CACHE_VERSION, "provider": feed.get("provider", "global news feed"),
+                "feed_url": url, "final_feed_url": fetched.get("feed_url") or url,
+                "observed_at": timestamp, "fetch_status": "success",
+                "entries_checked": len(fetched.get("entries", [])), "entries": fetched.get("entries", [])[:MAX_ENTRIES_PER_FEED],
+                "reused_from_cache": False, "source_scope": "global_news",
+            }
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, ET.ParseError) as exc:
+            return {"cache_version": TRIGGER_CACHE_VERSION, "provider": feed.get("provider", "global news feed"),
+                    "feed_url": url, "observed_at": timestamp, "fetch_status": "fetch_failed",
+                    "error_type": type(exc).__name__, "entries_checked": 0, "entries": [],
+                    "reused_from_cache": False, "source_scope": "global_news"}
+
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
-        feed_results = cached_results + list(pool.map(run, jobs))
+        project_results = cached_project_results + list(pool.map(run_project, project_jobs))
+        global_results = cached_global_results + list(pool.map(run_global, global_jobs))
+
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for result in feed_results:
+    for result in project_results:
         key = f"{str(result.get('chain') or '').casefold()}:{str(result.get('contract_address') or '').casefold()}"
         grouped.setdefault(key, []).append(result)
+
     records = []
+    total_candidates = 0
     for prospect in prospects:
         if not isinstance(prospect, dict):
             continue
         key = f"{str(prospect.get('chain') or '').casefold()}:{str(prospect.get('contract_address') or '').casefold()}"
-        feeds = grouped.get(key, [])
+        feeds = list(grouped.get(key, []))
+        for global_result in global_results:
+            if global_result.get("fetch_status") != "success":
+                feeds.append({
+                    "cache_version": TRIGGER_CACHE_VERSION, "project_name": prospect.get("project_name", ""),
+                    "chain": prospect.get("chain", ""), "contract_address": prospect.get("contract_address", ""),
+                    "feed_url": global_result.get("feed_url"), "observed_at": global_result.get("observed_at", timestamp),
+                    "fetch_status": global_result.get("fetch_status"), "source_scope": "global_news",
+                    "provider": global_result.get("provider"), "trigger_candidates": [], "reused_from_cache": global_result.get("reused_from_cache", False),
+                })
+                continue
+            matched = _match_feed_payload(prospect, global_result["feed_url"], global_result, global_result.get("observed_at", timestamp),
+                                          bool(global_result.get("reused_from_cache")), "global_news", global_result.get("provider"))
+            feeds.append(matched)
+        total_candidates += sum(len(item.get("trigger_candidates", [])) for item in feeds)
         records.append({
             "project_name": prospect.get("project_name", ""),
             "chain": prospect.get("chain", ""),
             "contract_address": prospect.get("contract_address", ""),
-            "feeds_attempted": len(feeds),
-            "feeds_succeeded": sum(item["fetch_status"] == "success" for item in feeds),
-            "feeds_failed": sum(item["fetch_status"] == "fetch_failed" for item in feeds),
-            "trigger_candidates": [candidate for item in feeds for candidate in item["trigger_candidates"]],
+            "project_feeds_attempted": sum(item.get("source_scope") == "project_linked" and not item.get("reused_from_cache") for item in feeds),
+            "global_feeds_processed": sum(item.get("source_scope") == "global_news" for item in feeds),
+            "feeds_succeeded": sum(item.get("fetch_status") == "success" for item in feeds),
+            "feeds_failed": sum(item.get("fetch_status") == "fetch_failed" for item in feeds),
+            "trigger_candidates": [candidate for item in feeds for candidate in item.get("trigger_candidates", [])],
             "feed_results": feeds,
             "buying_trigger_status": "unknown",
             "outreach_enabled": False,
         })
+    source_results = project_results + global_results
     return {
         "schema_version": 1,
         "cache_version": TRIGGER_CACHE_VERSION,
-        "source": "RSS/Atom feeds linked from candidate project websites",
+        "source": "Linked project RSS/Atom feeds plus CoinDesk and Cointelegraph public RSS feeds",
         "records_exported": len(records),
-        "feeds_attempted": len(jobs),
-        "feeds_processed": len(feed_results),
-        "feeds_succeeded": sum(item["fetch_status"] == "success" and not item.get("reused_from_cache") for item in feed_results),
-        "feeds_failed": sum(item["fetch_status"] == "fetch_failed" and not item.get("reused_from_cache") for item in feed_results),
-        "feeds_reused_from_cache": sum(bool(item.get("reused_from_cache")) for item in feed_results),
+        "feeds_attempted": len(project_jobs) + len(global_jobs),
+        "feeds_processed": len(source_results),
+        "feeds_succeeded": sum(item.get("fetch_status") == "success" and not item.get("reused_from_cache") for item in source_results),
+        "feeds_failed": sum(item.get("fetch_status") == "fetch_failed" and not item.get("reused_from_cache") for item in source_results),
+        "feeds_reused_from_cache": sum(bool(item.get("reused_from_cache")) for item in source_results),
         "cache_ttl_hours": cache_ttl_hours,
-        "trigger_candidates": sum(len(item["trigger_candidates"]) for item in feed_results),
+        "trigger_candidates": total_candidates,
         "verified_triggers_created": 0,
         "canonical_buying_trigger_reviews_changed": False,
         "qualification_scores_changed": False,
         "outreach_enabled": False,
+        "global_feed_results": global_results,
         "records": records,
     }
 
