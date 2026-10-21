@@ -72,6 +72,7 @@ class ProspectRecord:
     chain: str
     contract_address: str | None = None
     website_url: str | None = None
+    token_symbol: str | None = None
     metrics: Mapping[str, int | float | None] = field(default_factory=dict)
     evidence: tuple[Evidence, ...] = ()
 
@@ -88,6 +89,7 @@ class ProspectRecord:
             self.contract_address.strip() if self.contract_address and self.contract_address.strip() else None,
         )
         object.__setattr__(self, "website_url", _validated_http_url(self.website_url, "website_url"))
+        object.__setattr__(self, "token_symbol", self.token_symbol.strip() if self.token_symbol and self.token_symbol.strip() else None)
 
         clean_metrics: dict[str, int | float | None] = {}
         for key, value in self.metrics.items():
