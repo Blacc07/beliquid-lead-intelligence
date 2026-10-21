@@ -11,6 +11,11 @@ from beliquid.identity_risk import (
     load_identity_risk_reviews,
     DEFAULT_REVIEWS_PATH,
 )
+from beliquid.buying_triggers import (
+    assessment_for_prospect as trigger_assessment_for_prospect,
+    load_buying_trigger_reviews,
+    DEFAULT_REVIEWS_PATH as DEFAULT_TRIGGER_REVIEWS_PATH,
+)
 from beliquid.models import ProspectRecord
 from beliquid.market_priority import prioritize_market_research
 from beliquid.qualification import load_criteria_config, qualify_discovered_record
@@ -20,9 +25,11 @@ def _record_dict(
     record: ProspectRecord,
     config: dict[str, Any],
     identity_risk_reviews: dict[str, Any],
+    buying_trigger_reviews: dict[str, Any],
 ) -> dict[str, Any]:
     qualification = qualify_discovered_record(record, config)
     identity_risk = assessment_for_prospect(record.chain, record.contract_address, identity_risk_reviews)
+    buying_triggers = trigger_assessment_for_prospect(record.chain, record.contract_address, buying_trigger_reviews)
     market_research_priority = prioritize_market_research(dict(record.metrics))
     triage_bucket = (
         "identity_verification_required"
@@ -38,6 +45,7 @@ def _record_dict(
         "triage_bucket": triage_bucket,
         "identity_risk": identity_risk.to_dict(),
         "action_route": identity_risk.action_route,
+        "buying_triggers": buying_triggers.to_dict(),
         "market_research_priority": market_research_priority,
         "metrics": dict(record.metrics),
         "evidence": [
@@ -65,13 +73,15 @@ def write_review_exports(
     summary: dict[str, Any],
     output_dir: str | Path = "artifacts",
     identity_risk_reviews_path: str | Path = DEFAULT_REVIEWS_PATH,
+    buying_trigger_reviews_path: str | Path = DEFAULT_TRIGGER_REVIEWS_PATH,
 ) -> dict[str, str]:
-    """Write full-batch JSON and CSV exports using reviewer-managed risk findings."""
+    """Write full-batch exports with reviewer-managed identity, risk, and trigger findings."""
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     config = load_criteria_config()
     identity_risk_reviews = load_identity_risk_reviews(Path(identity_risk_reviews_path))
-    rows = [_record_dict(record, config, identity_risk_reviews) for record in records]
+    buying_trigger_reviews = load_buying_trigger_reviews(Path(buying_trigger_reviews_path))
+    rows = [_record_dict(record, config, identity_risk_reviews, buying_trigger_reviews) for record in records]
 
     route_counts: dict[str, int] = {}
     for row in rows:
@@ -99,21 +109,47 @@ def write_review_exports(
     }
     summary["market_research_priority"] = market_priority_summary
 
+    trigger_status_counts: dict[str, int] = {}
+    trigger_total = 0
+    verified_trigger_total = 0
+    inferred_trigger_total = 0
+    for row in rows:
+        trigger_data = row["buying_triggers"]
+        status = trigger_data["status"]
+        trigger_status_counts[status] = trigger_status_counts.get(status, 0) + 1
+        trigger_total += trigger_data["trigger_count"]
+        verified_trigger_total += trigger_data["verified_count"]
+        inferred_trigger_total += trigger_data["inferred_count"]
+    buying_trigger_summary = {
+        "review_records_loaded": len(buying_trigger_reviews),
+        "prospects_exported": len(rows),
+        "prospects_by_status": trigger_status_counts,
+        "trigger_observations": trigger_total,
+        "verified_trigger_observations": verified_trigger_total,
+        "inferred_trigger_observations": inferred_trigger_total,
+        "buying_intent_verified_by_market_metrics": False,
+        "automated_trigger_discovery_enabled": False,
+    }
+    summary["buying_triggers"] = buying_trigger_summary
+
     json_path = destination / "prospect-review.json"
     csv_path = destination / "prospect-review.csv"
     batch_path = destination / "pipeline-summary.json"
     json_payload = {
-        "schema_version": 4,
+        "schema_version": 5,
         "source": "DEX Screener",
         "records_exported": len(rows),
         "qualification_summary": summary.get("qualification", {}),
         "identity_risk_summary": identity_risk_summary,
         "market_research_priority_summary": market_priority_summary,
+        "buying_trigger_summary": buying_trigger_summary,
         "records": rows,
         "important_note": (
             "Research-only export. Market priority is an unvalidated research heuristic, not a lead score. "
             "Criterion findings remain unknown until criterion-specific evidence is reviewed. Identity/risk findings are loaded from config/identity_risk_reviews.json; "
-            "adverse identity or risk findings route to manual_hold. No outreach is enabled."
+            "adverse identity or risk findings route to manual_hold. Buying triggers are human-reviewed records from "
+            "config/buying_trigger_reviews.json; trigger labels do not automatically alter scores or identity/risk routes. "
+            "Market metrics alone do not verify buying intent. No outreach is enabled."
         ),
     }
     json_path.write_text(json.dumps(json_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -128,6 +164,8 @@ def write_review_exports(
         "identity_status", "identity_evidence_url", "identity_observed_at",
         "risk_status", "risk_evidence_url", "risk_observed_at", "action_route",
         "identity_risk_flags", "identity_risk_reviewer_note",
+        "buying_trigger_status", "buying_trigger_count", "verified_trigger_count",
+        "inferred_trigger_count", "buying_triggers_json",
     ]
     fieldnames = [
         "project_name", "token_symbol", "chain", "contract_address",
@@ -156,6 +194,7 @@ def write_review_exports(
                 if isinstance(criterion_key, str) and criterion_key:
                     statuses[criterion_key] = item.get("status", "unknown")
             identity_risk = row["identity_risk"]
+            buying_triggers = row["buying_triggers"]
             csv_row: dict[str, Any] = {
                 key: row.get(key) for key in (
                     "project_name", "token_symbol", "chain", "contract_address",
@@ -169,6 +208,13 @@ def write_review_exports(
                 "market_priority_signals": ";".join(priority["signals"]),
                 "market_priority_reasons": " | ".join(priority["reasons"]),
                 "volume_to_liquidity_ratio": priority["volume_to_liquidity_ratio"],
+            })
+            csv_row.update({
+                "buying_trigger_status": buying_triggers["status"],
+                "buying_trigger_count": buying_triggers["trigger_count"],
+                "verified_trigger_count": buying_triggers["verified_count"],
+                "inferred_trigger_count": buying_triggers["inferred_count"],
+                "buying_triggers_json": json.dumps(buying_triggers["triggers"], sort_keys=True),
             })
             csv_row.update({
                 "identity_status": identity_risk["identity_status"],
