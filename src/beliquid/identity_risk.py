@@ -1,18 +1,22 @@
 """Independent identity verification and risk routing for BeLiquid prospects.
 
-This module does not verify projects automatically. It validates reviewer-supplied
-findings and routes unresolved or adverse findings conservatively.
+Findings are supplied by a human reviewer in config/identity_risk_reviews.json.
+This module does not verify projects automatically; it validates reviewer findings
+and routes unresolved or adverse findings conservatively.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Literal
+from pathlib import Path
+from typing import Literal, Mapping
 from urllib.parse import urlparse
 
 IdentityStatus = Literal["unknown", "verified", "mismatch"]
 RiskStatus = Literal["unknown", "clear", "concern"]
 ActionRoute = Literal["research", "business_development_review", "manual_hold"]
+DEFAULT_REVIEWS_PATH = Path(__file__).resolve().parents[2] / "config" / "identity_risk_reviews.json"
 
 
 def _validate_evidence(url: str | None, observed_at: str | None, label: str) -> None:
@@ -89,3 +93,54 @@ class IdentityRiskAssessment:
             "review_flags": list(self.review_flags),
             "reviewer_note": self.reviewer_note,
         }
+
+
+def prospect_review_key(chain: str, contract_address: str | None) -> str:
+    """Build a case-normalized chain/contract key for human review records."""
+    if not chain or not chain.strip() or not contract_address or not contract_address.strip():
+        raise ValueError("chain and contract address are required for identity/risk review matching")
+    return f"{chain.strip().casefold()}:{contract_address.strip().casefold()}"
+
+
+def load_identity_risk_reviews(
+    path: Path = DEFAULT_REVIEWS_PATH,
+) -> dict[str, IdentityRiskAssessment]:
+    """Load reviewed findings; malformed files fail closed rather than being ignored."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Could not load identity/risk review records: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("reviews"), dict):
+        raise ValueError("identity/risk review file must contain a 'reviews' object")
+    result: dict[str, IdentityRiskAssessment] = {}
+    for raw_key, raw_review in payload["reviews"].items():
+        if not isinstance(raw_key, str) or ":" not in raw_key or not isinstance(raw_review, dict):
+            raise ValueError("each identity/risk review must use a 'chain:contract' key and an object value")
+        key = raw_key.strip().casefold()
+        if not key or key in result:
+            raise ValueError(f"duplicate or empty identity/risk review key: {raw_key!r}")
+        allowed = {
+            "identity_status", "identity_evidence_url", "identity_observed_at",
+            "risk_status", "risk_evidence_url", "risk_observed_at", "reviewer_note",
+        }
+        unexpected = set(raw_review) - allowed
+        if unexpected:
+            raise ValueError(f"unsupported fields for identity/risk review {raw_key!r}: {', '.join(sorted(unexpected))}")
+        try:
+            result[key] = IdentityRiskAssessment(**raw_review)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid identity/risk review for {raw_key!r}: {exc}") from exc
+    return result
+
+
+def assessment_for_prospect(
+    chain: str,
+    contract_address: str | None,
+    reviews: Mapping[str, IdentityRiskAssessment],
+) -> IdentityRiskAssessment:
+    """Return the reviewed record for a prospect, or conservative unknown defaults."""
+    if not contract_address:
+        return IdentityRiskAssessment()
+    return reviews.get(prospect_review_key(chain, contract_address), IdentityRiskAssessment())
