@@ -25,7 +25,7 @@ The discovery command makes one live HTTP request. The enrichment command fetche
 2. Select **BeLiquid Pipeline Health Check**.
 3. Choose **Run workflow** to execute it manually.
 4. Review the unit-test output, discovery/enrichment summary, and runtime health summary.
-5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv`, `prospect-review.json`, and `pipeline-summary.json`. The CSV includes reviewer status, evidence URL, observed timestamp, and reviewer-note columns for each criterion; those fields start as unknown/blank and do not affect scoring automatically. Artifacts are retained for 14 days.
+5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv`, `prospect-review.json`, and `pipeline-summary.json`. The CSV includes reviewer status, evidence URL, observed timestamp, and reviewer-note columns for each criterion; those fields start as unknown/blank and do not affect scoring automatically. Buying-trigger observations from `config/buying_trigger_reviews.json` are also exported with their evidence URL, observation timestamp, optional event date, and verified/inferred/unknown status. Trigger labels do not automatically change scores or identity/risk routing. Artifacts are retained for 14 days.
 
 The workflow is scheduled daily at 08:00 UTC. Scheduled jobs can be delayed. Usage limits depend on the repository's plan, runner type, and GitHub's current policies; public visibility does not guarantee unlimited use of every runner type.
 
@@ -49,7 +49,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 1. **Discover:** collect token/project candidates from supported public sources and preserve source timestamps.
 2. **Verify identity and risk:** cross-check chain, contract, official domain, and credible project references; hold conflicting identities.
 3. **Diagnose market quality:** measure liquidity separately from volume. Add spread, order-book depth, slippage, cross-venue divergence, and time-series analysis only when suitable source data is available.
-4. **Detect buying triggers:** store dated evidence and label each trigger verified, inferred, or unknown.
+4. **Review buying triggers:** add human-reviewed, dated event evidence in `config/buying_trigger_reviews.json`. Supported types include exchange listings, new trading pairs, TGE/launch, venue expansion, documented liquidity issues, milestones/campaigns, and token unlocks. Verified/inferred entries require an HTTP(S) source URL, timezone-aware observation timestamp, and summary. This component validates and exports reviewer input; it does not crawl news or treat market metrics as buying intent.
 5. **Score and route:** score only reviewed criterion evidence; keep data completeness and risk flags separate; route to research, nurture, BD review, manual hold, or reject.
 6. **Prepare outreach drafts:** generate evidence-backed service angles and discovery questions for human review. Sending remains disabled.
 
@@ -73,6 +73,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 - `config/qualification_criteria.json` — proposed BeLiquid-specific weights, evidence definitions, trigger labels, and routes.
 - `src/beliquid/scoring.py` — evidence-backed score primitives; unknowns and review flags are handled conservatively.
 - `src/beliquid/review_export.py` — full-batch CSV/JSON review artifacts.
+- `src/beliquid/buying_triggers.py` — validates human-reviewed buying-trigger observations.
 - `tests/` — offline tests for models, sources, scoring, qualification, and exports.
 
 ## Data-quality and safety rules
@@ -90,7 +91,7 @@ These weights are a starting hypothesis supplied for this project. They must be 
 1. Verify complete-batch exports and the revised configuration in GitHub Actions.
 2. Add contract/project identity verification and independent security/manual-hold routing.
 3. Add supported market-quality measurements with provenance and clear limitations.
-4. Add source-backed buying-trigger collection with verified/inferred/unknown labels.
+4. Add externally sourced buying-trigger discovery and source-specific adapters; the current component validates and exports human-reviewed trigger evidence only.
 5. Add reviewed criterion assessments and action recommendations.
 6. Validate the proposed scoring model against a manually reviewed pilot batch.
 7. Later, add persistence and human-approved outreach drafts.
