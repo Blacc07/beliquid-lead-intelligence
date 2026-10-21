@@ -183,6 +183,7 @@ class ValidateReviewBatchTests(unittest.TestCase):
         self.assertEqual(manifest["workflow"]["commit_sha"], "test-sha")
         self.assertIn("config/criterion_reviews.json", manifest["review_input_sha256"])
         self.assertIn("prospect-review.json", manifest["export_sha256"])
+        self.assertIn("automated-research.json", manifest["export_sha256"])
         self.assertFalse(manifest["validation"]["outreach_enabled"])
 
 
