@@ -1,0 +1,52 @@
+"""Offline tests for automated public-page evidence candidate collection."""
+import unittest
+from beliquid.automated_research import collect_research, research_record, _public_http_url
+
+
+class AutomatedResearchTests(unittest.TestCase):
+    def test_private_and_non_http_urls_are_rejected(self):
+        self.assertIsNone(_public_http_url("file:///etc/passwd"))
+        self.assertIsNone(_public_http_url("http://127.0.0.1/admin"))
+        self.assertIsNone(_public_http_url("http://localhost/"))
+
+    def test_no_candidate_website_preserves_unknown_states(self):
+        result = research_record({"project_name": "Token", "chain": "base", "contract_address": "0xabc"}, "2026-10-21T12:00:00Z")
+        self.assertEqual(result["fetch_status"], "no_website_candidate")
+        self.assertEqual(result["identity_status"], "unknown")
+        self.assertEqual(result["risk_status"], "unknown")
+        self.assertFalse(result["outreach_enabled"])
+
+    def test_failed_fetch_is_auditable_and_does_not_clear_risk(self):
+        def fail(url):
+            raise TimeoutError("slow")
+        result = research_record({"project_name": "Token", "chain": "base", "contract_address": "0xabc", "website_url_candidate": "https://example.org"}, "2026-10-21T12:00:00Z", fail)
+        self.assertEqual(result["fetch_status"], "fetch_failed")
+        self.assertEqual(result["identity_status"], "unknown")
+        self.assertEqual(result["risk_status"], "unknown")
+
+    def test_page_text_generates_candidates_not_qualification_findings(self):
+        page = {"final_url": "https://example.org/", "page_title": "Example", "meta_description": "Token",
+                "og_site_name": "Example", "text_excerpt": "We are launching a new exchange listing with liquidity and partnerships. 0xabc",
+                "links": [{"url": "https://github.com/example/project", "label": "GitHub"}]}
+        result = research_record({"project_name": "Token", "chain": "base", "contract_address": "0xabc", "website_url_candidate": "https://example.org"}, "2026-10-21T12:00:00Z", lambda url: page)
+        self.assertEqual(result["fetch_status"], "success")
+        self.assertTrue(result["page"]["contract_address_mentioned"])
+        self.assertTrue(any(item["term"] == "listing" for item in result["trigger_candidates"]))
+        self.assertTrue(all(item["status"] == "candidate_only" for item in result["trigger_candidates"]))
+        self.assertEqual(result["identity_status"], "unknown")
+        self.assertEqual(result["risk_status"], "unknown")
+        self.assertEqual(result["qualification_status"], "not_assessed")
+        self.assertFalse(result["outreach_enabled"])
+
+    def test_batch_counts_are_reconciled(self):
+        payload = {"records": [{"project_name": "A", "chain": "base", "contract_address": "a"},
+                               {"project_name": "B", "chain": "base", "contract_address": "b", "website_url_candidate": "https://example.org"}]}
+        result = collect_research(payload, "2026-10-21T12:00:00Z", lambda url: {"final_url": url, "page_title": "", "meta_description": "", "og_site_name": "", "text_excerpt": "", "links": []})
+        self.assertEqual(result["records_exported"], 2)
+        self.assertEqual(result["records_without_website_candidate"], 1)
+        self.assertEqual(result["records_with_page_fetched"], 1)
+        self.assertFalse(result["outreach_enabled"])
+
+
+if __name__ == "__main__":
+    unittest.main()
