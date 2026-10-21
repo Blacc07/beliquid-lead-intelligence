@@ -13,6 +13,16 @@ class AutomatedResearchTests(unittest.TestCase):
         self.assertTrue(second["records"][0]["reused_from_cache"])
         self.assertEqual(second["records_reused_from_cache"], 1)
 
+    def test_cache_version_change_forces_public_page_refresh(self):
+        payload = {"records": [{"project_name": "Cached", "chain": "base", "contract_address": "0xcached", "website_url_candidate": "https://example.org"}]}
+        page = {"final_url": "https://example.org", "text_excerpt": "Cached", "links": [], "feed_links": []}
+        first = collect_research(payload, "2026-10-21T10:00:00Z", lambda url: page)
+        first["records"][0]["cache_version"] = 1
+        second = collect_research(payload, "2026-10-21T11:00:00Z", lambda url: page,
+                                  previous_payload=first, cache_ttl_hours=24)
+        self.assertFalse(second["records"][0]["reused_from_cache"])
+        self.assertEqual(second["records_fetched_this_run"], 1)
+
     def test_private_and_non_http_urls_are_rejected(self):
         self.assertIsNone(_public_http_url("file:///etc/passwd"))
         self.assertIsNone(_public_http_url("http://127.0.0.1/admin"))
