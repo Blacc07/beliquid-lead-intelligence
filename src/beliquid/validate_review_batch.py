@@ -18,12 +18,14 @@ from beliquid.buying_triggers import load_buying_trigger_reviews
 from beliquid.criterion_reviews import load_criterion_reviews
 from beliquid.identity_risk import load_identity_risk_reviews
 from beliquid.qualification import load_criteria_config
+from beliquid.research_queue import validate_task_reviews
 
 REVIEW_FILES = {
     "criterion_reviews": Path("config/criterion_reviews.json"),
     "identity_risk_reviews": Path("config/identity_risk_reviews.json"),
     "buying_trigger_reviews": Path("config/buying_trigger_reviews.json"),
     "qualification_criteria": Path("config/qualification_criteria.json"),
+    "research_task_reviews": Path("config/research_task_reviews.json"),
 }
 
 
@@ -70,6 +72,7 @@ def validate_batch(artifacts_dir: Path, repo_root: Path = Path(".")) -> dict[str
     criterion_reviews = load_criterion_reviews(repo_root / REVIEW_FILES["criterion_reviews"], config)
     identity_reviews = load_identity_risk_reviews(repo_root / REVIEW_FILES["identity_risk_reviews"])
     trigger_reviews = load_buying_trigger_reviews(repo_root / REVIEW_FILES["buying_trigger_reviews"])
+    task_review_payload = json.loads((repo_root / REVIEW_FILES["research_task_reviews"]).read_text(encoding="utf-8"))
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     summary = json.loads(summary_path.read_text(encoding="utf-8"))
@@ -78,6 +81,8 @@ def validate_batch(artifacts_dir: Path, repo_root: Path = Path(".")) -> dict[str
     records = payload.get("records")
     if not isinstance(records, list) or payload.get("records_exported") != len(records):
         raise ValueError("JSON records and records_exported count disagree")
+
+    validate_task_reviews(task_review_payload, records)
 
     record_by_key: dict[str, dict[str, Any]] = {}
     for record in records:
@@ -235,7 +240,7 @@ def write_audit_manifest(artifacts_dir: Path, validation: dict[str, Any], repo_r
             raise ValueError(f"review input/config missing for audit manifest: {path}")
         input_hashes[str(relative)] = _sha256(path)
     output_hashes = {}
-    for name in ("prospect-review.csv", "prospect-review.json", "pipeline-summary.json"):
+    for name in ("prospect-review.csv", "prospect-review.json", "pipeline-summary.json", "research-queue.csv", "research-queue.json"):
         path = artifacts_dir / name
         output_hashes[name] = _sha256(path)
     manifest = {
