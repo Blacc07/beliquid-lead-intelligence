@@ -8,6 +8,7 @@ from http.client import HTTPException
 import json
 import logging
 import math
+import os
 from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
@@ -15,6 +16,7 @@ from urllib.request import Request
 
 from beliquid.models import Evidence, ProspectRecord
 from beliquid.qualification import load_criteria_config, summarize_qualification
+from beliquid.review_export import write_review_exports
 from beliquid.sources.dexscreener import (
     DEFAULT_TIMEOUT_SECONDS,
     MAX_RESPONSE_BYTES,
@@ -282,9 +284,23 @@ def main() -> int:
     """Discover current profiles, enrich token data, and print a bounded summary."""
     try:
         records = fetch_latest_profiles()
-        _enriched, summary = enrich_records(records)
+        enriched, summary = enrich_records(records)
+        exports = write_review_exports(
+            enriched,
+            summary,
+            output_dir=os.environ.get("BELIQUID_OUTPUT_DIR", "artifacts"),
+        )
+        summary["review_exports"] = exports
     except DexScreenerError as exc:
         print(json.dumps({"source": "DEX Screener", "status": "failure", "error": str(exc)}, sort_keys=True))
+        return 1
+    except (OSError, ValueError) as exc:
+        LOGGER.exception("Could not write the full-batch review exports.")
+        print(json.dumps({
+            "source": "DEX Screener",
+            "status": "failure",
+            "error": f"Could not write review exports: {type(exc).__name__}: {exc}",
+        }, sort_keys=True))
         return 1
     print(json.dumps(summary, sort_keys=True))
     if summary["status"] == "failure" and summary["batches_attempted"]:
