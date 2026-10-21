@@ -113,6 +113,7 @@ class ValidateReviewBatchTests(unittest.TestCase):
         )
         write_research_queue(self.artifacts / "prospect-review.json", self.artifacts, self.config_dir / "research_task_reviews.json")
         (self.artifacts / "automated-research.json").write_text(json.dumps({"schema_version": 1, "records": [], "outreach_enabled": False}), encoding="utf-8")
+        (self.artifacts / "security-research.json").write_text(json.dumps({"schema_version": 1, "records": [], "outreach_enabled": False}), encoding="utf-8")
 
     def test_validates_threshold_boundary_holds_trigger_separation_and_parity(self):
         result = validate_batch(self.artifacts, self.root)
@@ -184,6 +185,7 @@ class ValidateReviewBatchTests(unittest.TestCase):
         self.assertIn("config/criterion_reviews.json", manifest["review_input_sha256"])
         self.assertIn("prospect-review.json", manifest["export_sha256"])
         self.assertIn("automated-research.json", manifest["export_sha256"])
+        self.assertIn("security-research.json", manifest["export_sha256"])
         self.assertFalse(manifest["validation"]["outreach_enabled"])
 
 
