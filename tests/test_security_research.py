@@ -48,6 +48,25 @@ class SecurityResearchTests(unittest.TestCase):
         self.assertEqual(len(calls), 3)
         self.assertEqual(result["fetch_status"], "success")
 
+    def test_solana_rugcheck_high_risk_report_is_concern(self):
+        payload = {"mint": "So111", "riskLevel": "Dangerous", "rugged": False,
+                   "risks": [{"name": "High holder concentration", "level": "danger", "description": "Top holders dominate supply"}],
+                   "token": {"mintAuthority": "authority", "freezeAuthority": None}}
+        result = research_security({"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"},
+                                   "2026-10-21T12:00:00Z", lambda url: payload)
+        self.assertEqual(result["provider"], "RugCheck Solana Token Report")
+        self.assertEqual(result["fetch_status"], "success")
+        self.assertEqual(result["risk_status"], "concern")
+        self.assertTrue(result["provider_url"].startswith("https://api.rugcheck.xyz/v1/tokens/"))
+        self.assertEqual(result["criterion_evidence_candidate"]["criterion"], "security_and_reputational_integrity")
+
+    def test_solana_clean_report_is_not_global_clearance(self):
+        payload = {"mint": "So111", "riskLevel": "Good", "rugged": False, "risks": [], "score_normalised": 1}
+        result = research_security({"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"},
+                                   "2026-10-21T12:00:00Z", lambda url: payload)
+        self.assertEqual(result["risk_status"], "no_high_risk_flag_detected_by_provider")
+        self.assertNotEqual(result["risk_status"], "clear")
+
     def test_batch_preserves_outreach_disabled(self):
         result = collect_security({"records": [{"project_name": "X", "chain": "unsupported", "contract_address": "0xabc"}]},
                                   "2026-10-21T12:00:00Z")
