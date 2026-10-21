@@ -98,13 +98,15 @@ def _is_current_completion(entry: dict[str, Any] | None, record: dict[str, Any])
     return bool(entry and entry.get("input_fingerprint") == record_fingerprint(record))
 
 
-def _next_task(record: dict[str, Any], reviews: dict[str, dict[str, Any]]) -> tuple[str, str]:
+def _next_task(record: dict[str, Any], reviews: dict[str, dict[str, Any]], source_security: dict[str, Any] | None = None) -> tuple[str, str]:
     identity = record.get("identity_risk") or {}
     identity_status = identity.get("identity_status", "unknown")
     risk_status = identity.get("risk_status", "unknown")
     route = identity.get("action_route", record.get("action_route", "research"))
 
-    # A documented hold is a terminal automated disposition, not a human task.
+    # A documented canonical or independent provider concern is an automated hold.
+    if (source_security or {}).get("risk_status") == "concern":
+        return "resolve_manual_hold", "Automated hold: independent contract-security source reported a high-severity concern; excluded from commercial clearance."
     if route == "manual_hold" or identity_status == "mismatch" or risk_status == "concern":
         return "resolve_manual_hold", "Automated hold: documented identity mismatch or risk concern; excluded from the cleared list."
 
@@ -129,13 +131,24 @@ def _next_task(record: dict[str, Any], reviews: dict[str, dict[str, Any]]) -> tu
     return "follow_up_incomplete_research", "Research queue complete for this snapshot; automated disposition follows evidence coverage and identity/risk clearance rules."
 
 
-def build_research_queue(payload: dict[str, Any], task_reviews: Any = None) -> dict[str, Any]:
+def build_research_queue(payload: dict[str, Any], task_reviews: Any = None, security_research: Any = None) -> dict[str, Any]:
     records = payload.get("records")
     if not isinstance(records, list):
         raise ValueError("prospect-review input must contain a records list")
     if any(not isinstance(record, dict) for record in records):
         raise ValueError("each prospect record must be an object")
     reviews = validate_task_reviews(task_reviews or {"schema_version": 1, "reviews": {}}, records)
+    source_security_by_key: dict[str, dict[str, Any]] = {}
+    if security_research is not None:
+        if not isinstance(security_research, dict) or not isinstance(security_research.get("records"), list):
+            raise ValueError("security research must contain a records list")
+        for result in security_research["records"]:
+            if not isinstance(result, dict):
+                raise ValueError("each security research record must be an object")
+            key = _key(result)
+            if key in source_security_by_key:
+                raise ValueError(f"duplicate security research record: {key}")
+            source_security_by_key[key] = result
     tasks, seen = [], set()
     for record in records:
         name, chain, contract = record.get("project_name"), record.get("chain"), record.get("contract_address")
@@ -145,7 +158,8 @@ def build_research_queue(payload: dict[str, Any], task_reviews: Any = None) -> d
         if key in seen:
             raise ValueError(f"duplicate prospect in queue input: {chain}:{contract}")
         seen.add(key)
-        task, rationale = _next_task(record, reviews.get(key, {}))
+        source_security = source_security_by_key.get(key, {})
+        task, rationale = _next_task(record, reviews.get(key, {}), source_security)
         market, identity = record.get("market_research_priority") or {}, record.get("identity_risk") or {}
         qualification = record.get("qualification") or {}
         signals = market.get("signals", [])
@@ -154,13 +168,18 @@ def build_research_queue(payload: dict[str, Any], task_reviews: Any = None) -> d
         current = reviews.get(key, {}).get(task)
         identity_status = identity.get("identity_status", "unknown")
         risk_status = identity.get("risk_status", "unknown")
-        is_cleared = identity_status == "verified" and risk_status == "clear" and task != "resolve_manual_hold"
+        is_cleared = identity_status == "verified" and risk_status == "clear" and task != "resolve_manual_hold" and source_security.get("risk_status") != "concern"
+        queue_route = "manual_hold" if source_security.get("risk_status") == "concern" else identity.get("action_route", record.get("action_route", "research"))
         tasks.append({
             "task_order": TASK_ORDER[task], "task": task, "project_name": name, "chain": chain,
             "contract_address": contract, "website_url_candidate": record.get("website_url_candidate"),
             "identity_status": identity_status, "risk_status": risk_status,
+            "canonical_risk_status": risk_status,
+            "automated_security_status": source_security.get("risk_status", "unknown"),
+            "automated_security_fetch_status": source_security.get("fetch_status", "not_attempted"),
+            "automated_security_findings_count": len(source_security.get("findings", [])) if isinstance(source_security.get("findings", []), list) else 0,
             "clearance_status": "cleared" if is_cleared else ("held" if task == "resolve_manual_hold" else "unresolved"),
-            "action_route": identity.get("action_route", record.get("action_route", "research")),
+            "action_route": queue_route,
             "market_priority": market.get("priority", "insufficient_data"),
             "market_priority_signals": ";".join(signals),
             "buying_trigger_status": (record.get("buying_triggers") or {}).get("status", "unknown"),
@@ -184,15 +203,16 @@ def build_research_queue(payload: dict[str, Any], task_reviews: Any = None) -> d
     }
 
 
-def write_research_queue(input_path: Path, output_dir: Path, reviews_path: Path | None = None) -> dict[str, str]:
+def write_research_queue(input_path: Path, output_dir: Path, reviews_path: Path | None = None, security_path: Path | None = None) -> dict[str, str]:
     try:
         payload = json.loads(input_path.read_text(encoding="utf-8"))
         review_payload = json.loads(reviews_path.read_text(encoding="utf-8")) if reviews_path else {"schema_version": 1, "reviews": {}}
+        security_payload = json.loads(security_path.read_text(encoding="utf-8")) if security_path and security_path.is_file() else None
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"Could not read queue input/review JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise ValueError("prospect-review input must be a JSON object")
-    queue = build_research_queue(payload, review_payload)
+    queue = build_research_queue(payload, review_payload, security_payload)
     output_dir.mkdir(parents=True, exist_ok=True)
     jp, cp = output_dir / "research-queue.json", output_dir / "research-queue.csv"
     jp.write_text(json.dumps(queue, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -209,8 +229,9 @@ def main() -> None:
     parser.add_argument("--input", type=Path, default=Path("artifacts/prospect-review.json"))
     parser.add_argument("--output-dir", type=Path, default=Path("artifacts"))
     parser.add_argument("--reviews", type=Path, default=Path("config/research_task_reviews.json"))
+    parser.add_argument("--security-research", type=Path, default=Path("artifacts/security-research.json"))
     args = parser.parse_args()
-    print(json.dumps(write_research_queue(args.input, args.output_dir, args.reviews), indent=2))
+    print(json.dumps(write_research_queue(args.input, args.output_dir, args.reviews, args.security_research), indent=2))
 
 
 if __name__ == "__main__":
