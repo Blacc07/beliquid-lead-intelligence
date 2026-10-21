@@ -4,7 +4,7 @@ Automated discovery, qualification, scoring, and routing of potential crypto/Web
 
 ## Current status
 
-**Phase 1 foundation plus discovery, market enrichment, and a standalone scoring engine.** The workflow runs standard-library unit tests, discovers token profiles, looks up token names/symbols and market data from DEX Screener, and emits a structured summary. The scoring engine is implemented and tested but is not yet wired into discovery or configured with BeLiquid-approved criteria. Records are not yet persisted, and the system does not contact leads.
+**Phase 1 foundation plus discovery, market enrichment, and a standalone scoring engine.** The workflow runs standard-library unit tests, discovers token profiles, looks up token names/symbols and market data from DEX Screener, and emits a structured summary. The scoring engine is implemented and tested. A draft qualification-criteria configuration has been added for review, but it is not yet approved or wired into discovery. Records are not yet persisted, and the system does not contact leads.
 
 ## Run locally
 
