@@ -50,7 +50,7 @@ class SecurityResearchTests(unittest.TestCase):
 
     def test_solana_rugcheck_high_risk_report_is_concern(self):
         payload = {"mint": "So111", "riskLevel": "Dangerous", "rugged": False,
-                   "risks": [{"name": "High holder concentration", "level": "danger", "description": "Top holders dominate supply"}],
+                   "risks": [{"name": "Creator history of rugged tokens", "level": "danger", "description": "Creator history of rugged tokens"}],
                    "token": {"mintAuthority": "authority", "freezeAuthority": None}}
         result = research_security({"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"},
                                    "2026-10-21T12:00:00Z", lambda url: payload)
@@ -66,6 +66,13 @@ class SecurityResearchTests(unittest.TestCase):
                                    "2026-10-21T12:00:00Z", lambda url: payload)
         self.assertEqual(result["risk_status"], "no_high_risk_flag_detected_by_provider")
         self.assertNotEqual(result["risk_status"], "clear")
+
+    def test_low_liquidity_signal_is_not_misclassified_as_security_hold(self):
+        payload = {"mint": "So111", "risks": [{"name": "Low Liquidity", "level": "danger", "description": "Low amount of liquidity in the token pool"}]}
+        result = research_security({"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"},
+                                   "2026-10-21T12:00:00Z", lambda url: payload)
+        self.assertEqual(result["risk_status"], "no_high_risk_flag_detected_by_provider")
+        self.assertTrue(any(item["field"] == "risk_item" and item["severity"] == "review" for item in result["findings"]))
 
     def test_batch_preserves_outreach_disabled(self):
         result = collect_security({"records": [{"project_name": "X", "chain": "unsupported", "contract_address": "0xabc"}]},
