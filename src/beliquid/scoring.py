@@ -7,6 +7,7 @@ Callers must provide explicit signal assessments and evidence URLs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import math
 from typing import Literal
 from urllib.parse import urlparse
@@ -22,6 +23,7 @@ class SignalAssessment:
     weight: float
     status: SignalStatus
     evidence_urls: tuple[str, ...] = ()
+    evidence_timestamps: tuple[str, ...] = ()
     note: str | None = None
     review_flag: str | None = None
 
@@ -42,10 +44,22 @@ class SignalAssessment:
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise ValueError("evidence URLs must be absolute HTTP(S) URLs")
             clean_urls.append(value.strip())
+        timestamps = list(self.evidence_timestamps)
+        if len(timestamps) != len(clean_urls):
+            if clean_urls or timestamps:
+                raise ValueError("each evidence URL must have exactly one evidence timestamp")
+        for timestamp in timestamps:
+            try:
+                parsed_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+            except (TypeError, ValueError) as exc:
+                raise ValueError("evidence timestamps must be ISO 8601 timestamps") from exc
+            if parsed_time.tzinfo is None or parsed_time.utcoffset() is None:
+                raise ValueError("evidence timestamps must include a timezone")
         if self.status in {"confirmed", "not_present"} and not clean_urls:
-            raise ValueError("confirmed and not_present assessments require evidence URLs")
+            raise ValueError("confirmed and not_present assessments require evidence URLs and timestamps")
         object.__setattr__(self, "key", self.key.strip())
         object.__setattr__(self, "evidence_urls", tuple(clean_urls))
+        object.__setattr__(self, "evidence_timestamps", tuple(timestamps))
         if self.note is not None:
             object.__setattr__(self, "note", self.note.strip() or None)
         if self.review_flag is not None:
@@ -108,6 +122,7 @@ def score_lead(
             "status": item.status,
             "earned_points": item.weight if item.status == "confirmed" else 0.0 if item.status == "not_present" else None,
             "evidence_urls": list(item.evidence_urls),
+            "evidence_timestamps": list(item.evidence_timestamps),
             "note": item.note,
             "review_flag": item.review_flag,
         }
