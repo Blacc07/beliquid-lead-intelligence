@@ -34,7 +34,11 @@ class TaskLedgerTests(unittest.TestCase):
             "fetch_status": "fetch_failed", "provider_url": "https://api.gopluslabs.io/api/v1/token_security/1",
             "observed_at": STAMP,
         }]}
-        result = build_task_ledger({"records": [row]}, public, security, STAMP)
+        trigger = {"records": [{
+            "project_name": "alpha", "chain": "ethereum", "contract_address": row["contract_address"],
+            "feeds_succeeded": 1, "feed_results": [{"fetch_status": "success", "final_feed_url": "https://alpha.example/feed.xml", "observed_at": STAMP}],
+        }]}
+        result = build_task_ledger({"records": [row]}, public, security, STAMP, trigger)
         tasks = result["reviews"]["ethereum:0xalpha"]
         self.assertIn("verify_identity_and_risk", tasks)
         self.assertIn("investigate_market_quality", tasks)
