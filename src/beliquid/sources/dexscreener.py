@@ -65,8 +65,15 @@ def _is_http_url(value: Any) -> bool:
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
+_SOCIAL_HOSTS = {
+    "x.com", "twitter.com", "t.co", "facebook.com", "instagram.com",
+    "t.me", "telegram.me", "discord.gg", "discord.com", "youtube.com",
+    "youtu.be", "tiktok.com", "reddit.com", "medium.com", "github.com",
+}
+
+
 def _official_website(links: Any) -> str | None:
-    """Return a URL explicitly labelled as a website; do not guess from social links."""
+    """Return a labelled, non-social website candidate; metadata remains unverified."""
     if not isinstance(links, list):
         return None
     for link in links:
@@ -75,8 +82,16 @@ def _official_website(links: Any) -> str | None:
         kind = str(link.get("type") or "").strip().casefold()
         label = str(link.get("label") or "").strip().casefold()
         url = link.get("url")
-        if (kind == "website" or label in {"website", "official website", "site"}) and _is_http_url(url):
-            return url.strip()
+        if not (kind == "website" or label in {"website", "official website", "site"}):
+            continue
+        if not _is_http_url(url):
+            continue
+        parsed = urlparse(url.strip())
+        host = (parsed.hostname or "").lower().removeprefix("www.")
+        if host in _SOCIAL_HOSTS or any(host.endswith("." + social_host) for social_host in _SOCIAL_HOSTS):
+            LOGGER.warning("Ignoring social-platform URL labelled as a website: %s", host)
+            continue
+        return url.strip()
     return None
 
 
