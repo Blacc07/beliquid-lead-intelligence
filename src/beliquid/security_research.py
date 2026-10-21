@@ -99,6 +99,7 @@ def research_security(record: dict[str, Any], observed_at: str, requester: Calla
         "provider_report_status": "unknown",
         "risk_status": "unknown",
         "findings": [],
+        "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "unknown", "evidence_url": None, "observed_at": None},
         "outreach_enabled": False,
     }
     chain_id = CHAIN_IDS.get(chain)
@@ -141,6 +142,7 @@ def research_security(record: dict[str, Any], observed_at: str, requester: Calla
         "provider_report_status": "found",
         "risk_status": "concern" if any(item["severity"] == "high" for item in findings) else "no_high_risk_flag_detected_by_provider",
         "findings": findings,
+        "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "candidate_only", "source_scoped_risk_status": "concern" if any(item["severity"] == "high" for item in findings) else "no_high_risk_flag_detected_by_provider", "evidence_url": url, "observed_at": observed_at, "note": "A single provider report is not a complete security or reputational assessment."},
         "report_fields_present": sorted(str(key) for key in report.keys()),
         "research_note": (
             "GoPlus reported one or more high-severity contract flags. Treat as a source-backed concern requiring a hold; "
