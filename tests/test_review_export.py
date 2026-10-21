@@ -41,6 +41,8 @@ class ReviewExportTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
             self.assertEqual(len(rows), 2)
             self.assertEqual(rows[0]["explicit_liquidity_need_status"], "unknown")
+            self.assertEqual(rows[0]["review_explicit_liquidity_need_status"], "unknown")
+            self.assertEqual(rows[0]["review_explicit_liquidity_need_evidence_url"], "")
             self.assertEqual(rows[0]["volume_24h_usd"], "0")
             self.assertEqual(rows[0]["score_percent"], "")
             self.assertTrue(Path(paths["summary"]).exists())
