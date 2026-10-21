@@ -41,9 +41,20 @@ class NormalizeProfilesTests(unittest.TestCase):
         self.assertEqual(record.evidence[0].observed_at, "2026-10-21T13:00:00Z")
         self.assertEqual(record.metrics, {})
 
-    def test_does_not_mistake_social_link_for_official_website(self):
+    def test_does_not_mistake_social_link_for_website(self):
         profile = {**SAMPLE_PROFILE, "links": [{"type": "twitter", "url": "https://social.example/project"}]}
         self.assertIsNone(normalize_profiles([profile])[0].website_url)
+
+    def test_rejects_social_platform_even_when_labelled_website(self):
+        profile = {
+            **SAMPLE_PROFILE,
+            "links": [{"type": "website", "label": "Website", "url": "https://x.com/i/trending/123"}],
+        }
+        self.assertIsNone(normalize_profiles([profile])[0].website_url)
+
+    def test_accepts_non_social_website_candidate(self):
+        records = normalize_profiles([SAMPLE_PROFILE])
+        self.assertEqual(records[0].website_url, "https://project.example")
 
     def test_uses_api_url_when_profile_evidence_url_is_invalid(self):
         profile = {**SAMPLE_PROFILE, "url": "javascript:alert(1)"}
