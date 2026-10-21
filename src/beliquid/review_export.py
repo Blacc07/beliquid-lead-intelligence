@@ -12,6 +12,7 @@ from beliquid.identity_risk import (
     DEFAULT_REVIEWS_PATH,
 )
 from beliquid.models import ProspectRecord
+from beliquid.market_priority import prioritize_market_research
 from beliquid.qualification import load_criteria_config, qualify_discovered_record
 
 
@@ -22,6 +23,7 @@ def _record_dict(
 ) -> dict[str, Any]:
     qualification = qualify_discovered_record(record, config)
     identity_risk = assessment_for_prospect(record.chain, record.contract_address, identity_risk_reviews)
+    market_research_priority = prioritize_market_research(dict(record.metrics))
     triage_bucket = (
         "identity_verification_required"
         if not record.website_url
@@ -36,6 +38,7 @@ def _record_dict(
         "triage_bucket": triage_bucket,
         "identity_risk": identity_risk.to_dict(),
         "action_route": identity_risk.action_route,
+        "market_research_priority": market_research_priority,
         "metrics": dict(record.metrics),
         "evidence": [
             {
@@ -83,20 +86,33 @@ def write_review_exports(
         "research_count": route_counts.get("research", 0),
     }
     summary["identity_risk"] = identity_risk_summary
+    priority_counts: dict[str, int] = {}
+    for row in rows:
+        priority = row["market_research_priority"]["priority"]
+        priority_counts[priority] = priority_counts.get(priority, 0) + 1
+    market_priority_summary = {
+        "priority_counts": priority_counts,
+        "prospects_triaged": len(rows),
+        "thresholds_are_pilot_heuristics": True,
+        "qualification_scores_issued": 0,
+        "buying_intent_verified_by_metrics": False,
+    }
+    summary["market_research_priority"] = market_priority_summary
 
     json_path = destination / "prospect-review.json"
     csv_path = destination / "prospect-review.csv"
     batch_path = destination / "pipeline-summary.json"
     json_payload = {
-        "schema_version": 3,
+        "schema_version": 4,
         "source": "DEX Screener",
         "records_exported": len(rows),
         "qualification_summary": summary.get("qualification", {}),
         "identity_risk_summary": identity_risk_summary,
+        "market_research_priority_summary": market_priority_summary,
         "records": rows,
         "important_note": (
-            "Research-only export. Criterion findings remain unknown until criterion-specific "
-            "evidence is reviewed. Identity/risk findings are loaded from config/identity_risk_reviews.json; "
+            "Research-only export. Market priority is an unvalidated research heuristic, not a lead score. "
+            "Criterion findings remain unknown until criterion-specific evidence is reviewed. Identity/risk findings are loaded from config/identity_risk_reviews.json; "
             "adverse identity or risk findings route to manual_hold. No outreach is enabled."
         ),
     }
@@ -115,7 +131,7 @@ def write_review_exports(
     ]
     fieldnames = [
         "project_name", "token_symbol", "chain", "contract_address",
-        "website_url_candidate", "triage_bucket", *metric_keys, *identity_risk_fields,
+        "website_url_candidate", "triage_bucket", *metric_keys, "market_research_priority", "market_priority_signals", "market_priority_reasons", "volume_to_liquidity_ratio", *identity_risk_fields,
         *[f"{key}_status" for key in criterion_keys],
         *[field for key in criterion_keys for field in (
             f"review_{key}_status", f"review_{key}_evidence_url",
@@ -147,6 +163,13 @@ def write_review_exports(
                 )
             }
             csv_row.update(row["metrics"])
+            priority = row["market_research_priority"]
+            csv_row.update({
+                "market_research_priority": priority["priority"],
+                "market_priority_signals": ";".join(priority["signals"]),
+                "market_priority_reasons": " | ".join(priority["reasons"]),
+                "volume_to_liquidity_ratio": priority["volume_to_liquidity_ratio"],
+            })
             csv_row.update({
                 "identity_status": identity_risk["identity_status"],
                 "identity_evidence_url": identity_risk["identity_evidence_url"] or "",
