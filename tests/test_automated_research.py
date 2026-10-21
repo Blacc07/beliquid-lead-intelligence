@@ -44,11 +44,25 @@ class AutomatedResearchTests(unittest.TestCase):
         self.assertTrue(all(item["status"] == "candidate_only" for item in result["trigger_candidates"]))
         self.assertEqual(result["identity_status"], "unknown")
         self.assertEqual(result["risk_status"], "unknown")
+        self.assertEqual(result["identity_candidate_assessment"]["status"], "unresolved")
+        self.assertFalse(result["identity_candidate_assessment"]["score_is_probability"])
         self.assertEqual(result["qualification_status"], "not_assessed")
         criteria = {item["criterion"] for item in result["criterion_evidence_candidates"]}
         self.assertTrue({"service_fit_and_demonstrated_need", "market_activity_and_commercial_potential", "buying_trigger_and_timing", "project_credibility_and_team_access", "growth_and_strategic_potential"}.issubset(criteria))
         self.assertTrue(all(item["status"] == "candidate_only" for item in result["criterion_evidence_candidates"]))
         self.assertFalse(result["outreach_enabled"])
+
+    def test_identity_candidate_mismatch_is_recorded_without_auto_verification(self):
+        record = {"project_name": "Expected Project", "token_symbol": "EXPT", "chain": "base",
+                  "contract_address": "0xabc", "website_url_candidate": "https://example.org"}
+        page = {"final_url": "https://example.org/", "page_title": "Different Project",
+                "og_site_name": "Different", "meta_description": "Another project", "text_excerpt": "A separate product",
+                "links": [], "feed_links": []}
+        result = research_record(record, "2026-10-21T12:00:00Z", lambda url: page)
+        assessment = result["identity_candidate_assessment"]
+        self.assertEqual(assessment["status"], "unresolved")
+        self.assertTrue(any(item["type"] == "candidate_name_or_symbol_not_matched" for item in assessment["conflicts"]))
+        self.assertEqual(result["identity_status"], "unknown")
 
     def test_batch_counts_are_reconciled(self):
         payload = {"records": [{"project_name": "A", "chain": "base", "contract_address": "a"},
