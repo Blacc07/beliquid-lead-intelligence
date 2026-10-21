@@ -253,9 +253,10 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
         "schema_version": 1,
         "source": "RSS/Atom feeds linked from candidate project websites",
         "records_exported": len(records),
-        "feeds_attempted": len(feed_results),
-        "feeds_succeeded": sum(item["fetch_status"] == "success" for item in feed_results),
-        "feeds_failed": sum(item["fetch_status"] == "fetch_failed" for item in feed_results),
+        "feeds_attempted": len(jobs),
+        "feeds_processed": len(feed_results),
+        "feeds_succeeded": sum(item["fetch_status"] == "success" and not item.get("reused_from_cache") for item in feed_results),
+        "feeds_failed": sum(item["fetch_status"] == "fetch_failed" and not item.get("reused_from_cache") for item in feed_results),
         "feeds_reused_from_cache": sum(bool(item.get("reused_from_cache")) for item in feed_results),
         "cache_ttl_hours": cache_ttl_hours,
         "trigger_candidates": sum(len(item["trigger_candidates"]) for item in feed_results),
@@ -274,7 +275,7 @@ def write_trigger_research(prospect_path: Path, public_path: Path, output_path: 
     result = collect_trigger_research(prospect, public, previous_payload=previous, cache_ttl_hours=cache_ttl_hours)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    return {key: result[key] for key in ("records_exported", "feeds_attempted", "feeds_succeeded", "feeds_failed", "trigger_candidates", "outreach_enabled")}
+    return {key: result[key] for key in ("records_exported", "feeds_attempted", "feeds_processed", "feeds_succeeded", "feeds_failed", "feeds_reused_from_cache", "trigger_candidates", "outreach_enabled")}
 
 
 def main() -> int:
