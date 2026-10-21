@@ -59,17 +59,36 @@ def load_criteria_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
     return config
 
 
-def qualify_discovered_record(record: ProspectRecord, config: dict[str, Any]) -> dict[str, Any]:
-    """Return a score report without inferring criterion findings from market data."""
-    assessments = [
-        SignalAssessment(
+def qualify_discovered_record(
+    record: ProspectRecord,
+    config: dict[str, Any],
+    criterion_reviews: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Score only explicit human assessments; discovery and market metrics never auto-assess criteria."""
+    criterion_reviews = criterion_reviews or {}
+    known_keys = {item["key"] for item in config["criteria"]}
+    unexpected = set(criterion_reviews) - known_keys
+    if unexpected:
+        raise ValueError(f"criterion reviews contain unknown keys: {', '.join(sorted(unexpected))}")
+    assessments = []
+    for item in config["criteria"]:
+        reviewed = criterion_reviews.get(item["key"], {})
+        status = reviewed.get("status", "unknown")
+        evidence_urls = tuple(reviewed.get("evidence_urls", []))
+        evidence_timestamps = tuple(reviewed.get("evidence_timestamps", []))
+        note = reviewed.get("note")
+        review_flag = reviewed.get("review_flag")
+        if status == "unknown" and not note:
+            note = "Not yet assessed against the criterion definition; discovery and market metrics are not sufficient evidence."
+        assessments.append(SignalAssessment(
             key=item["key"],
             weight=item["weight"],
-            status="unknown",
-            note="Not yet assessed against the criterion definition; discovery and market metrics are not sufficient evidence.",
-        )
-        for item in config["criteria"]
-    ]
+            status=status,
+            evidence_urls=evidence_urls,
+            evidence_timestamps=evidence_timestamps,
+            note=note,
+            review_flag=review_flag,
+        ))
     result = score_lead(
         assessments,
         minimum_coverage_percent=float(config["minimum_evidence_coverage_percent"]),
