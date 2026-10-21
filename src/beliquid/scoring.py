@@ -49,8 +49,10 @@ class SignalAssessment:
             if clean_urls or timestamps:
                 raise ValueError("each evidence URL must have exactly one evidence timestamp")
         for timestamp in timestamps:
+            if not isinstance(timestamp, str) or not timestamp.strip():
+                raise ValueError("evidence timestamps must be non-empty ISO 8601 strings")
             try:
-                parsed_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                parsed_time = datetime.fromisoformat(timestamp.strip().replace("Z", "+00:00"))
             except (TypeError, ValueError) as exc:
                 raise ValueError("evidence timestamps must be ISO 8601 timestamps") from exc
             if parsed_time.tzinfo is None or parsed_time.utcoffset() is None:
