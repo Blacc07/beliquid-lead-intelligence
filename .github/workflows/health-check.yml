@@ -35,6 +35,11 @@ jobs:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
 
+      - name: Discover latest DEX Screener token profiles
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.sources.dexscreener
+
       - name: Run pipeline health check
         env:
           PYTHONPATH: src
@@ -54,4 +59,5 @@ jobs:
             echo "- Trigger: ${EVENT_NAME}"
             echo "- Job status: ${JOB_STATUS}"
             echo "- Python: 3.12"
+            echo "- Discovery source: DEX Screener latest token profiles"
           } >> "$GITHUB_STEP_SUMMARY"
