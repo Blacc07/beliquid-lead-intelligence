@@ -9,6 +9,7 @@ import unittest
 
 from beliquid.models import ProspectRecord
 from beliquid.review_export import write_review_exports
+from beliquid.research_queue import write_research_queue
 from beliquid.validate_review_batch import validate_batch, write_audit_manifest
 
 URL = "https://evidence.example/review"
@@ -30,7 +31,8 @@ class ValidateReviewBatchTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.config_dir = self.root / "config"
         self.config_dir.mkdir()
-        shutil.copy(REPO_ROOT / "config" / "qualification_criteria.json", self.config_dir / "qualification_criteria.json")
+        for config_name in ("qualification_criteria.json", "research_task_reviews.json"):
+            shutil.copy(REPO_ROOT / "config" / config_name, self.config_dir / config_name)
         self.artifacts = self.root / "artifacts"
         self.artifacts.mkdir()
         self.records = [
@@ -109,6 +111,7 @@ class ValidateReviewBatchTests(unittest.TestCase):
             self.config_dir / "buying_trigger_reviews.json",
             self.config_dir / "criterion_reviews.json",
         )
+        write_research_queue(self.artifacts / "prospect-review.json", self.artifacts, self.config_dir / "research_task_reviews.json")
 
     def test_validates_threshold_boundary_holds_trigger_separation_and_parity(self):
         result = validate_batch(self.artifacts, self.root)
