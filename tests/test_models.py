@@ -25,6 +25,12 @@ class EvidenceTests(unittest.TestCase):
 
 
 class ProspectRecordTests(unittest.TestCase):
+    def test_token_symbol_is_trimmed_and_blank_becomes_unknown(self):
+        named = ProspectRecord("Sample", "Base", token_symbol="  SMP  ")
+        blank = ProspectRecord("Sample", "Base", token_symbol="  ")
+        self.assertEqual(named.token_symbol, "SMP")
+        self.assertIsNone(blank.token_symbol)
+
     def test_unknown_metrics_remain_none(self):
         prospect = ProspectRecord("Sample Protocol", "Base", metrics={"tvl_usd": None})
         self.assertIsNone(prospect.metrics["tvl_usd"])
