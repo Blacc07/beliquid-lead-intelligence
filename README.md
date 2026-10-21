@@ -24,7 +24,7 @@ The discovery command makes one live HTTP request. The enrichment command fetche
 1. Open the **Actions** tab.
 2. Select **BeLiquid Pipeline Health Check**.
 3. Choose **Run workflow** to execute it manually.
-4. Review the unit-test output, discovery/enrichment summary, and runtime health summary.\n5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv` (spreadsheet-friendly), `prospect-review.json` (complete records and evidence), and `pipeline-summary.json`. Artifacts are retained for 14 days.
+4. Review the unit-test output, discovery/enrichment summary, and runtime health summary.\n5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv` (spreadsheet-friendly), `prospect-review.json` (complete records and evidence), and `pipeline-summary.json`. The CSV includes editable reviewer status, evidence URL, observed timestamp, and reviewer-note columns for each of the six criteria; those columns start as `unknown`/blank and do not affect scoring automatically. Artifacts are retained for 14 days.
 
 The workflow is also scheduled daily at 08:00 UTC. GitHub-hosted scheduled jobs can be delayed and are not guaranteed to start at the exact minute. Usage limits depend on the repository's plan, runner type, and GitHub's current policies; public visibility alone does not guarantee unlimited use of every runner type.
 
