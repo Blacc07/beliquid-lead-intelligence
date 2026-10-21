@@ -14,6 +14,7 @@ from urllib.parse import quote
 from urllib.request import Request
 
 from beliquid.models import Evidence, ProspectRecord
+from beliquid.qualification import load_criteria_config, summarize_qualification
 from beliquid.sources.dexscreener import (
     DEFAULT_TIMEOUT_SECONDS,
     MAX_RESPONSE_BYTES,
@@ -242,6 +243,8 @@ def enrich_records(
         if any(record.metrics.get(key) is not None for key in _METRIC_KEYS if key != "pool_count")
     )
     status = "success" if not failures else ("partial_success" if batches_succeeded else "failure")
+    criteria_config = load_criteria_config()
+    qualification_summary = summarize_qualification(enriched, criteria_config)
     summary = {
         "source": "DEX Screener",
         "status": status,
@@ -250,6 +253,7 @@ def enrich_records(
         "batches_attempted": batch_count,
         "batches_succeeded": batches_succeeded,
         "batch_failures": failures,
+        "qualification": qualification_summary,
         "note": (
             "Metrics describe each token's highest-liquidity matching pool, not totals across pools. "
             "Missing data remains unknown; discovery and market metrics are not a lead-quality score."
