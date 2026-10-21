@@ -36,6 +36,9 @@ class AutomatedResearchTests(unittest.TestCase):
         self.assertEqual(result["identity_status"], "unknown")
         self.assertEqual(result["risk_status"], "unknown")
         self.assertEqual(result["qualification_status"], "not_assessed")
+        criteria = {item["criterion"] for item in result["criterion_evidence_candidates"]}
+        self.assertTrue({"service_fit_and_demonstrated_need", "market_activity_and_commercial_potential", "buying_trigger_and_timing", "project_credibility_and_team_access", "growth_and_strategic_potential"}.issubset(criteria))
+        self.assertTrue(all(item["status"] == "candidate_only" for item in result["criterion_evidence_candidates"]))
         self.assertFalse(result["outreach_enabled"])
 
     def test_batch_counts_are_reconciled(self):
