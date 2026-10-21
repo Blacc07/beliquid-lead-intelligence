@@ -39,7 +39,7 @@ class ReviewExportTests(unittest.TestCase):
             summary = {"qualification": {"prospects_evaluated": 2}}
             paths = write_review_exports(self.records, summary, output, review_path)
             payload = json.loads(Path(paths["json"]).read_text(encoding="utf-8"))
-            self.assertEqual(payload["schema_version"], 3)
+            self.assertEqual(payload["schema_version"], 4)
             self.assertEqual(payload["records_exported"], 2)
             self.assertEqual(len(payload["records"]), 2)
             first = payload["records"][0]
@@ -51,6 +51,10 @@ class ReviewExportTests(unittest.TestCase):
             self.assertTrue(all(c["status"] == "unknown" for c in first["qualification"]["criteria"]))
             self.assertFalse(first["qualification"]["outreach_enabled"])
             self.assertEqual(payload["identity_risk_summary"]["research_count"], 2)
+            self.assertEqual(payload["market_research_priority_summary"]["prospects_triaged"], 2)
+            self.assertEqual(first["market_research_priority"]["priority"], "low")
+            self.assertIsNone(first["market_research_priority"]["qualification_score"])
+            self.assertFalse(first["market_research_priority"]["buying_intent_verified"])
 
             with Path(paths["csv"]).open(encoding="utf-8-sig", newline="") as handle:
                 rows = list(csv.DictReader(handle))
@@ -63,6 +67,7 @@ class ReviewExportTests(unittest.TestCase):
             self.assertEqual(rows[0]["identity_status"], "unknown")
             self.assertEqual(rows[0]["risk_status"], "unknown")
             self.assertEqual(rows[0]["action_route"], "research")
+            self.assertEqual(rows[0]["market_research_priority"], "low")
             self.assertIn("official_identity_unverified", rows[0]["identity_risk_flags"])
             self.assertTrue(Path(paths["summary"]).exists())
 
