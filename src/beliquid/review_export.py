@@ -11,12 +11,14 @@ import json
 from pathlib import Path
 from typing import Any
 
+from beliquid.identity_risk import IdentityRiskAssessment
 from beliquid.models import ProspectRecord
 from beliquid.qualification import load_criteria_config, qualify_discovered_record
 
 
 def _record_dict(record: ProspectRecord, config: dict[str, Any]) -> dict[str, Any]:
     qualification = qualify_discovered_record(record, config)
+    identity_risk = IdentityRiskAssessment()
     has_website = bool(record.website_url)
     # These are research queues, not qualification judgments or exclusions.
     triage_bucket = (
@@ -31,6 +33,8 @@ def _record_dict(record: ProspectRecord, config: dict[str, Any]) -> dict[str, An
         "contract_address": record.contract_address,
         "website_url_candidate": record.website_url,
         "triage_bucket": triage_bucket,
+        "identity_risk": identity_risk.to_dict(),
+        "action_route": identity_risk.action_route,
         "metrics": dict(record.metrics),
         "evidence": [
             {
@@ -45,7 +49,9 @@ def _record_dict(record: ProspectRecord, config: dict[str, Any]) -> dict[str, An
         "qualification": qualification,
         "review_note": (
             "Research queue only. Candidate website is unverified; a DEX profile or market "
-            "metric does not establish project identity, product activity, buying intent, or service fit."
+            "metric does not establish project identity, product activity, buying intent, or service fit. "
+            "Identity and risk states remain unknown until a reviewer records dated evidence. "
+            "A documented identity mismatch or risk concern must be placed on manual hold."
         ),
     }
 
@@ -66,14 +72,16 @@ def write_review_exports(
     batch_path = destination / "pipeline-summary.json"
 
     json_payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source": "DEX Screener",
         "records_exported": len(rows),
         "qualification_summary": summary.get("qualification", {}),
         "records": rows,
         "important_note": (
             "Research-only export. Criterion findings remain unknown until a reviewer records "
-            "criterion-specific evidence, URLs, timestamps, and notes. No outreach is enabled."
+            "criterion-specific evidence, URLs, timestamps, and notes. Identity/risk findings are "
+            "also unknown by default; adverse identity or risk findings require manual hold. "
+            "No outreach is enabled."
         ),
     }
     json_path.write_text(json.dumps(json_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -84,9 +92,14 @@ def write_review_exports(
         "fdv_usd", "txns_24h_buys", "txns_24h_sells", "pool_count",
     )
     criterion_keys = [item["key"] for item in config["criteria"]]
+    identity_risk_fields = [
+        "identity_status", "identity_evidence_url", "identity_observed_at",
+        "risk_status", "risk_evidence_url", "risk_observed_at", "action_route",
+        "identity_risk_flags", "identity_risk_reviewer_note",
+    ]
     fieldnames = [
         "project_name", "token_symbol", "chain", "contract_address",
-        "website_url_candidate", "triage_bucket", *metric_keys,
+        "website_url_candidate", "triage_bucket", *metric_keys, *identity_risk_fields,
         *[f"{key}_status" for key in criterion_keys],
         *[field for key in criterion_keys for field in (
             f"review_{key}_status", f"review_{key}_evidence_url",
@@ -111,6 +124,7 @@ def write_review_exports(
                 criterion_key = item.get("criterion", item.get("key"))
                 if isinstance(criterion_key, str) and criterion_key:
                     statuses[criterion_key] = item.get("status", "unknown")
+            identity_risk = row["identity_risk"]
             csv_row: dict[str, Any] = {
                 key: row.get(key) for key in (
                     "project_name", "token_symbol", "chain", "contract_address",
@@ -118,8 +132,19 @@ def write_review_exports(
                 )
             }
             csv_row.update(row["metrics"])
+            csv_row.update({
+                "identity_status": identity_risk["identity_status"],
+                "identity_evidence_url": identity_risk["identity_evidence_url"] or "",
+                "identity_observed_at": identity_risk["identity_observed_at"] or "",
+                "risk_status": identity_risk["risk_status"],
+                "risk_evidence_url": identity_risk["risk_evidence_url"] or "",
+                "risk_observed_at": identity_risk["risk_observed_at"] or "",
+                "action_route": identity_risk["action_route"],
+                "identity_risk_flags": ";".join(identity_risk["review_flags"]),
+                "identity_risk_reviewer_note": identity_risk["reviewer_note"] or "",
+            })
             csv_row.update({f"{key}_status": statuses.get(key, "unknown") for key in criterion_keys})
-            # Reviewer fields are intentionally blank/unknown; exports do not invent findings.
+            # Criterion reviewer fields are intentionally blank/unknown; exports do not invent findings.
             for key in criterion_keys:
                 csv_row[f"review_{key}_status"] = "unknown"
                 csv_row[f"review_{key}_evidence_url"] = ""
