@@ -1,9 +1,4 @@
-"""Write a complete, human-reviewable prospect batch export.
-
-Exports are workflow artifacts, not a permanent database. No qualification evidence
-is inferred from discovery or market metrics, and all scores remain governed by
-the qualification module.
-"""
+"""Write a complete, human-reviewable prospect batch export."""
 from __future__ import annotations
 
 import csv
@@ -11,19 +6,25 @@ import json
 from pathlib import Path
 from typing import Any
 
-from beliquid.identity_risk import assessment_for_prospect, load_identity_risk_reviews, prospect_review_key
+from beliquid.identity_risk import (
+    assessment_for_prospect,
+    load_identity_risk_reviews,
+    DEFAULT_REVIEWS_PATH,
+)
 from beliquid.models import ProspectRecord
 from beliquid.qualification import load_criteria_config, qualify_discovered_record
 
 
-def _record_dict(record: ProspectRecord, config: dict[str, Any], identity_risk_reviews: dict[str, Any]) -> dict[str, Any]:
+def _record_dict(
+    record: ProspectRecord,
+    config: dict[str, Any],
+    identity_risk_reviews: dict[str, Any],
+) -> dict[str, Any]:
     qualification = qualify_discovered_record(record, config)
     identity_risk = assessment_for_prospect(record.chain, record.contract_address, identity_risk_reviews)
-    has_website = bool(record.website_url)
-    # These are research queues, not qualification judgments or exclusions.
     triage_bucket = (
         "identity_verification_required"
-        if not has_website
+        if not record.website_url
         else "official_identity_check_required"
     )
     return {
@@ -50,8 +51,8 @@ def _record_dict(record: ProspectRecord, config: dict[str, Any], identity_risk_r
         "review_note": (
             "Research queue only. Candidate website is unverified; a DEX profile or market "
             "metric does not establish project identity, product activity, buying intent, or service fit. "
-            "Identity and risk states remain unknown until a reviewer records dated evidence. "
-            "A documented identity mismatch or risk concern must be placed on manual hold."
+            "Identity/risk findings come only from the reviewer-managed input file. "
+            "A documented identity mismatch or risk concern routes to manual_hold."
         ),
     }
 
@@ -60,28 +61,43 @@ def write_review_exports(
     records: list[ProspectRecord],
     summary: dict[str, Any],
     output_dir: str | Path = "artifacts",
+    identity_risk_reviews_path: str | Path = DEFAULT_REVIEWS_PATH,
 ) -> dict[str, str]:
-    """Write full-batch JSON and CSV files, returning their relative paths."""
+    """Write full-batch JSON and CSV exports using reviewer-managed risk findings."""
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
     config = load_criteria_config()
-    identity_risk_reviews = load_identity_risk_reviews()\n    rows = [_record_dict(record, config, identity_risk_reviews) for record in records]
+    identity_risk_reviews = load_identity_risk_reviews(Path(identity_risk_reviews_path))
+    rows = [_record_dict(record, config, identity_risk_reviews) for record in records]
+
+    route_counts: dict[str, int] = {}
+    for row in rows:
+        route = row["action_route"]
+        route_counts[route] = route_counts.get(route, 0) + 1
+    identity_risk_summary = {
+        "review_records_loaded": len(identity_risk_reviews),
+        "prospects_exported": len(rows),
+        "action_route_counts": route_counts,
+        "manual_hold_count": route_counts.get("manual_hold", 0),
+        "business_development_review_count": route_counts.get("business_development_review", 0),
+        "research_count": route_counts.get("research", 0),
+    }
+    summary["identity_risk"] = identity_risk_summary
 
     json_path = destination / "prospect-review.json"
     csv_path = destination / "prospect-review.csv"
     batch_path = destination / "pipeline-summary.json"
-
     json_payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "source": "DEX Screener",
         "records_exported": len(rows),
-        "qualification_summary": summary.get("qualification", {}),\n        "identity_risk_summary": identity_risk_summary,
+        "qualification_summary": summary.get("qualification", {}),
+        "identity_risk_summary": identity_risk_summary,
         "records": rows,
         "important_note": (
-            "Research-only export. Criterion findings remain unknown until a reviewer records "
-            "criterion-specific evidence, URLs, timestamps, and notes. Identity/risk findings are "
-            "also unknown by default; adverse identity or risk findings require manual hold. "
-            "No outreach is enabled."
+            "Research-only export. Criterion findings remain unknown until criterion-specific "
+            "evidence is reviewed. Identity/risk findings are loaded from config/identity_risk_reviews.json; "
+            "adverse identity or risk findings route to manual_hold. No outreach is enabled."
         ),
     }
     json_path.write_text(json.dumps(json_payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -120,7 +136,6 @@ def write_review_exports(
             for item in criteria_report:
                 if not isinstance(item, dict):
                     continue
-                # score_lead() emits "criterion"; accept "key" as a compatibility alias.
                 criterion_key = item.get("criterion", item.get("key"))
                 if isinstance(criterion_key, str) and criterion_key:
                     statuses[criterion_key] = item.get("status", "unknown")
@@ -144,7 +159,6 @@ def write_review_exports(
                 "identity_risk_reviewer_note": identity_risk["reviewer_note"] or "",
             })
             csv_row.update({f"{key}_status": statuses.get(key, "unknown") for key in criterion_keys})
-            # Criterion reviewer fields are intentionally blank/unknown; exports do not invent findings.
             for key in criterion_keys:
                 csv_row[f"review_{key}_status"] = "unknown"
                 csv_row[f"review_{key}_evidence_url"] = ""
