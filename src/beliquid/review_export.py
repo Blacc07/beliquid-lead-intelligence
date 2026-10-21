@@ -103,13 +103,14 @@ def write_review_exports(
             criteria_report = qualification.get("criteria", [])
             if not isinstance(criteria_report, list):
                 criteria_report = []
-            statuses = {
-                item["key"]: item.get("status", "unknown")
-                for item in criteria_report
-                if isinstance(item, dict)
-                and isinstance(item.get("key"), str)
-                and item["key"]
-            }
+            statuses = {}
+            for item in criteria_report:
+                if not isinstance(item, dict):
+                    continue
+                # score_lead() emits "criterion"; accept "key" as a compatibility alias.
+                criterion_key = item.get("criterion", item.get("key"))
+                if isinstance(criterion_key, str) and criterion_key:
+                    statuses[criterion_key] = item.get("status", "unknown")
             csv_row: dict[str, Any] = {
                 key: row.get(key) for key in (
                     "project_name", "token_symbol", "chain", "contract_address",
