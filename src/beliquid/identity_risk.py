@@ -20,12 +20,12 @@ DEFAULT_REVIEWS_PATH = Path(__file__).resolve().parents[2] / "config" / "identit
 
 
 def _validate_evidence(url: str | None, observed_at: str | None, label: str) -> None:
-    if not url or not url.strip():
+    if not isinstance(url, str) or not url.strip():
         raise ValueError(f"{label} requires an evidence URL")
     parsed = urlparse(url.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError(f"{label} evidence URL must be an absolute HTTP(S) URL")
-    if not observed_at or not observed_at.strip():
+    if not isinstance(observed_at, str) or not observed_at.strip():
         raise ValueError(f"{label} requires an observation timestamp")
     try:
         parsed_time = datetime.fromisoformat(observed_at.strip().replace("Z", "+00:00"))
@@ -52,11 +52,13 @@ class IdentityRiskAssessment:
             raise ValueError("identity_status must be unknown, verified, or mismatch")
         if self.risk_status not in {"unknown", "clear", "concern"}:
             raise ValueError("risk_status must be unknown, clear, or concern")
-        if self.identity_status in {"verified", "mismatch"}:
+        if self.identity_status in {"verified", "mismatch"} or self.identity_evidence_url is not None or self.identity_observed_at is not None:
             _validate_evidence(self.identity_evidence_url, self.identity_observed_at, "identity assessment")
-        if self.risk_status in {"clear", "concern"}:
+        if self.risk_status in {"clear", "concern"} or self.risk_evidence_url is not None or self.risk_observed_at is not None:
             _validate_evidence(self.risk_evidence_url, self.risk_observed_at, "risk assessment")
         if self.reviewer_note is not None:
+            if not isinstance(self.reviewer_note, str):
+                raise ValueError("reviewer_note must be a string")
             object.__setattr__(self, "reviewer_note", self.reviewer_note.strip() or None)
 
     @property
