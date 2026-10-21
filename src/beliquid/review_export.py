@@ -161,7 +161,7 @@ def write_review_exports(
     csv_path = destination / "prospect-review.csv"
     batch_path = destination / "pipeline-summary.json"
     json_payload = {
-        "schema_version": 6,
+        "schema_version": 7,
         "source": "DEX Screener",
         "records_exported": len(rows),
         "qualification_summary": summary.get("qualification", {}),
@@ -202,8 +202,10 @@ def write_review_exports(
         *[field for key in criterion_keys for field in (
             f"review_{key}_status", f"review_{key}_evidence_url",
             f"review_{key}_observed_at", f"review_{key}_reviewer_note",
+            f"review_{key}_evidence_urls_json", f"review_{key}_evidence_timestamps_json",
+            f"review_{key}_review_flag",
         )],
-        "score_percent", "score_status", "evidence_coverage_percent",
+        "score_percent", "score_status", "evidence_coverage_percent", "outreach_enabled",
         "review_flags", "evidence_json", "review_note",
     ]
     with csv_path.open("w", encoding="utf-8-sig", newline="") as handle:
@@ -262,13 +264,19 @@ def write_review_exports(
             for key in criterion_keys:
                 review = reviewed_criteria.get(key, {})
                 csv_row[f"review_{key}_status"] = review.get("status", "unknown")
-                csv_row[f"review_{key}_evidence_url"] = ";".join(review.get("evidence_urls", []))
-                csv_row[f"review_{key}_observed_at"] = ";".join(review.get("evidence_timestamps", []))
+                evidence_urls = review.get("evidence_urls", [])
+                evidence_timestamps = review.get("evidence_timestamps", [])
+                csv_row[f"review_{key}_evidence_url"] = ";".join(evidence_urls)
+                csv_row[f"review_{key}_observed_at"] = ";".join(evidence_timestamps)
                 csv_row[f"review_{key}_reviewer_note"] = review.get("note") or ""
+                csv_row[f"review_{key}_evidence_urls_json"] = json.dumps(evidence_urls, ensure_ascii=False)
+                csv_row[f"review_{key}_evidence_timestamps_json"] = json.dumps(evidence_timestamps, ensure_ascii=False)
+                csv_row[f"review_{key}_review_flag"] = review.get("review_flag") or ""
             csv_row.update({
                 "score_percent": qualification["score_percent"],
                 "score_status": qualification["score_status"],
                 "evidence_coverage_percent": qualification["evidence_coverage_percent"],
+                "outreach_enabled": str(bool(qualification["outreach_enabled"])).lower(),
                 "review_flags": ";".join(qualification["review_flags"]),
                 "evidence_json": json.dumps(row["evidence"], sort_keys=True),
             })
