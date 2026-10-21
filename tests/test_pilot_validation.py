@@ -67,7 +67,9 @@ class PilotValidationTests(unittest.TestCase):
 
     def test_review_flags_prevent_second_review_ready(self):
         statuses = {key: "confirmed" for key in CRITERIA}
-        result = assess_record(record(statuses=statuses, identity="verified", risk="clear", flags=["evidence_outdated"]))
+        candidate = record(statuses=statuses, identity="verified", risk="clear")
+        candidate["identity_risk"]["review_flags"] = ["evidence_outdated"]
+        result = assess_record(candidate)
         self.assertEqual(result["review_completion_status"], "in_progress")
 
     def test_report_separates_engineering_from_evidence_quality(self):
