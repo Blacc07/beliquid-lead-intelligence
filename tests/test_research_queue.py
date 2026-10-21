@@ -101,6 +101,22 @@ class ResearchQueueTests(unittest.TestCase):
         item = build_research_queue({"records": [row]}, ledger)["tasks"][0]
         self.assertEqual(item["task"], "resolve_manual_hold")
 
+    def test_independent_high_severity_security_finding_forces_automated_hold(self):
+        row = prospect("SecurityConcern", priority="high")
+        security = {"records": [{
+            "project_name": row["project_name"], "chain": row["chain"],
+            "contract_address": row["contract_address"], "risk_status": "concern",
+            "fetch_status": "success", "findings": [{"field": "is_honeypot", "severity": "high"}],
+        }]}
+        item = build_research_queue({"records": [row]}, security_research=security)["tasks"][0]
+        self.assertEqual(item["task"], "resolve_manual_hold")
+        self.assertEqual(item["clearance_status"], "held")
+        self.assertEqual(item["action_route"], "manual_hold")
+        self.assertEqual(item["identity_status"], "unknown")
+        self.assertEqual(item["canonical_risk_status"], "unknown")
+        self.assertEqual(item["automated_security_status"], "concern")
+        self.assertFalse(item["outreach_enabled"])
+
     def test_bad_ledger_fails_closed(self):
         row = prospect("Unknown")
         ledger = {"schema_version": 1, "reviews": {"ethereum:" + row["contract_address"]: {
