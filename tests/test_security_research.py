@@ -74,6 +74,39 @@ class SecurityResearchTests(unittest.TestCase):
         self.assertEqual(result["risk_status"], "no_high_risk_flag_detected_by_provider")
         self.assertTrue(any(item["field"] == "risk_item" and item["severity"] == "review" for item in result["findings"]))
 
+    def test_recent_security_result_is_reused(self):
+        row = {"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"}
+        previous = collect_security({"records": [row]}, "2026-10-21T10:00:00Z",
+                                    lambda url: {"mint": "So111", "riskLevel": "Good", "risks": []})
+        current = collect_security({"records": [row]}, "2026-10-21T11:00:00Z",
+                                   lambda url: self.fail("recent report should be reused"),
+                                   previous_payload=previous, cache_ttl_hours=24)
+        self.assertTrue(current["records"][0]["reused_from_cache"])
+        self.assertEqual(current["records_reused_from_cache"], 1)
+
+    def test_historical_high_risk_concern_survives_clean_later_report(self):
+        row = {"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111",
+               "identity_risk": {"identity_status": "unknown", "risk_status": "unknown"}}
+        previous = collect_security({"records": [row]}, "2026-10-20T10:00:00Z",
+                                    lambda url: {"mint": "So111", "rugged": True, "risks": []})
+        current = collect_security({"records": [row]}, "2026-10-21T12:00:00Z",
+                                   lambda url: {"mint": "So111", "riskLevel": "Good", "rugged": False, "risks": []},
+                                   previous_payload=previous, cache_ttl_hours=0)
+        self.assertEqual(current["records"][0]["risk_status"], "concern")
+        self.assertTrue(current["records"][0]["historical_concern_retained"])
+        self.assertEqual(current["records"][0]["criterion_evidence_candidate"]["source_scoped_risk_status"], "concern")
+
+    def test_explicit_canonical_clearance_forces_fresh_check_of_cached_concern(self):
+        row = {"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111",
+               "identity_risk": {"identity_status": "verified", "risk_status": "clear"}}
+        previous = collect_security({"records": [row]}, "2026-10-21T10:00:00Z",
+                                    lambda url: {"mint": "So111", "rugged": True, "risks": []})
+        current = collect_security({"records": [row]}, "2026-10-21T11:00:00Z",
+                                   lambda url: {"mint": "So111", "riskLevel": "Good", "rugged": False, "risks": []},
+                                   previous_payload=previous, cache_ttl_hours=24)
+        self.assertEqual(current["records"][0]["risk_status"], "no_high_risk_flag_detected_by_provider")
+        self.assertFalse(current["records"][0].get("reused_from_cache", False))
+
     def test_batch_preserves_outreach_disabled(self):
         result = collect_security({"records": [{"project_name": "X", "chain": "unsupported", "contract_address": "0xabc"}]},
                                   "2026-10-21T12:00:00Z")
