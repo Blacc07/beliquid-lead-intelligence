@@ -6,6 +6,7 @@ from beliquid.scoring import SignalAssessment, score_lead
 
 
 URL = "https://example.org/evidence"
+TIMESTAMP = "2026-10-21T12:00:00Z"
 
 
 class SignalAssessmentTests(unittest.TestCase):
@@ -22,11 +23,19 @@ class SignalAssessmentTests(unittest.TestCase):
     def test_confirmed_and_not_present_require_evidence(self):
         for status in ("confirmed", "not_present"):
             with self.subTest(status=status), self.assertRaises(ValueError):
-                SignalAssessment("fit", 10, status)
+                SignalAssessment("fit", 10, status, (URL,), evidence_timestamps=(TIMESTAMP,))
 
     def test_rejects_invalid_evidence_url(self):
         with self.assertRaises(ValueError):
-            SignalAssessment("fit", 10, "confirmed", ("javascript:alert(1)",))
+            SignalAssessment("fit", 10, "confirmed", ("javascript:alert(1)",), evidence_timestamps=(TIMESTAMP,))
+
+    def test_evidence_url_requires_timestamp(self):
+        with self.assertRaisesRegex(ValueError, "timestamp"):
+            SignalAssessment("fit", 10, "confirmed", (URL,))
+
+    def test_rejects_timestamp_without_timezone(self):
+        with self.assertRaisesRegex(ValueError, "timezone"):
+            SignalAssessment("fit", 10, "confirmed", (URL,), evidence_timestamps=("2026-10-21T12:00:00",))
 
     def test_unknown_can_have_no_evidence(self):
         assessment = SignalAssessment("fit", 10, "unknown")
@@ -36,8 +45,8 @@ class SignalAssessmentTests(unittest.TestCase):
 class ScoreLeadTests(unittest.TestCase):
     def test_scores_only_assessed_criteria_and_reports_coverage(self):
         result = score_lead([
-            SignalAssessment("commercial_trigger", 40, "confirmed", (URL,)),
-            SignalAssessment("official_site", 30, "not_present", (URL,)),
+            SignalAssessment("commercial_trigger", 40, "confirmed", (URL,), evidence_timestamps=(TIMESTAMP,)),
+            SignalAssessment("official_site", 30, "not_present", (URL,), evidence_timestamps=(TIMESTAMP,)),
             SignalAssessment("funding_signal", 30, "unknown"),
         ])
         self.assertEqual(result.earned_points, 40)
@@ -49,7 +58,7 @@ class ScoreLeadTests(unittest.TestCase):
 
     def test_withholds_score_when_evidence_coverage_is_too_low(self):
         result = score_lead([
-            SignalAssessment("commercial_trigger", 20, "confirmed", (URL,)),
+            SignalAssessment("commercial_trigger", 20, "confirmed", (URL,), evidence_timestamps=(TIMESTAMP,)),
             SignalAssessment("official_site", 80, "unknown"),
         ])
         self.assertIsNone(result.score_percent)
@@ -65,15 +74,15 @@ class ScoreLeadTests(unittest.TestCase):
 
     def test_review_flags_are_independent_of_score(self):
         result = score_lead([
-            SignalAssessment("fit", 100, "confirmed", (URL,), review_flag="verify_project_identity"),
+            SignalAssessment("fit", 100, "confirmed", (URL,), evidence_timestamps=(TIMESTAMP,), review_flag="verify_project_identity"),
         ])
         self.assertEqual(result.score_percent, 100)
         self.assertEqual(result.review_flags, ("verify_project_identity",))
 
     def test_deduplicates_review_flags_in_order(self):
         result = score_lead([
-            SignalAssessment("fit_a", 50, "confirmed", (URL,), review_flag="manual_review"),
-            SignalAssessment("fit_b", 50, "not_present", (URL,), review_flag="manual_review"),
+            SignalAssessment("fit_a", 50, "confirmed", (URL,), evidence_timestamps=(TIMESTAMP,), review_flag="manual_review"),
+            SignalAssessment("fit_b", 50, "not_present", (URL,), evidence_timestamps=(TIMESTAMP,), review_flag="manual_review"),
         ])
         self.assertEqual(result.review_flags, ("manual_review",))
 
