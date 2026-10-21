@@ -274,6 +274,7 @@ def collect_research(payload: dict[str, Any], observed_at: str | None = None, fe
         "source": "candidate public project websites",
         "records_exported": len(results),
         "records_with_page_fetched": sum(item["fetch_status"] == "success" for item in results),
+        "records_fetched_this_run": sum(item["fetch_status"] == "success" and not item.get("reused_from_cache") for item in results),
         "records_without_website_candidate": sum(item["fetch_status"] == "no_website_candidate" for item in results),
         "records_with_fetch_failures": sum(item["fetch_status"] == "fetch_failed" for item in results),
         "records_reused_from_cache": sum(bool(item.get("reused_from_cache")) for item in results),
