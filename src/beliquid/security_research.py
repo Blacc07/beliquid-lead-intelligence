@@ -299,6 +299,7 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
                 "historical_concern_retained": True,
                 "prior_concern_observed_at": prior.get("observed_at"),
                 "prior_concern_provider": prior.get("provider"),
+                "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "candidate_only", "source_scoped_risk_status": "concern", "evidence_url": prior.get("provider_url"), "observed_at": prior.get("observed_at"), "note": "A prior high-severity concern remains active until explicitly resolved."},
                 "findings": prior_findings + current_findings,
                 "research_note": "A prior high-severity concern is retained because the latest source result did not explicitly resolve it. A source outage or clean single-provider report does not silently clear a documented concern.",
             })
