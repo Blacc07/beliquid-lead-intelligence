@@ -100,7 +100,16 @@ def write_review_exports(
         writer.writeheader()
         for row in rows:
             qualification = row["qualification"]
-            statuses = {item["key"]: item["status"] for item in qualification["criteria"]}
+            criteria_report = qualification.get("criteria", [])
+            if not isinstance(criteria_report, list):
+                criteria_report = []
+            statuses = {
+                item["key"]: item.get("status", "unknown")
+                for item in criteria_report
+                if isinstance(item, dict)
+                and isinstance(item.get("key"), str)
+                and item["key"]
+            }
             csv_row: dict[str, Any] = {
                 key: row.get(key) for key in (
                     "project_name", "token_symbol", "chain", "contract_address",
