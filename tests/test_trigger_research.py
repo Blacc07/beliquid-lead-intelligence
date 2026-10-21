@@ -44,6 +44,17 @@ class TriggerResearchTests(unittest.TestCase):
         self.assertEqual(result["fetch_status"], "fetch_failed")
         self.assertEqual(result["trigger_candidates"], [])
 
+    def test_recent_successful_feed_is_reused(self):
+        prospect = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "token_symbol": "ALPHA"}]}
+        public = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "feed_candidates": [{"url": "https://alpha.example/feed.xml"}]}]}
+        feed = {"feed_url": "https://alpha.example/feed.xml", "entries": []}
+        first = collect_trigger_research(prospect, public, "2026-10-21T10:00:00Z", lambda url: feed)
+        second = collect_trigger_research(prospect, public, "2026-10-21T11:00:00Z",
+                                          lambda url: self.fail("recent feed should be reused"),
+                                          previous_payload=first, cache_ttl_hours=24)
+        self.assertEqual(second["feeds_reused_from_cache"], 1)
+        self.assertEqual(second["feeds_attempted"], 1)
+
     def test_batch_preserves_unknown_and_outreach_disabled(self):
         prospect = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "token_symbol": "ALPHA"}]}
         public = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "feed_candidates": [{"url": "https://alpha.example/feed.xml"}]}]}
