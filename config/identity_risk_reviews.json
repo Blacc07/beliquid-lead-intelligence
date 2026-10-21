@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "instructions": [
+    "Add one entry per reviewed prospect using a chain:contract key.",
+    "Use lowercase-insensitive chain and contract matching; preserve the chain and contract format from the exported prospect.",
+    "Only set verified, mismatch, clear, or concern when you have checked evidence.",
+    "Every non-unknown status requires its own HTTP(S) evidence URL and timezone-aware ISO 8601 timestamp.",
+    "An identity mismatch or risk concern automatically routes the prospect to manual_hold.",
+    "Do not set risk_status to clear merely because no problem was found quickly; document the sources actually checked.",
+    "This file is a reviewer input. Do not add secrets or private credentials."
+  ],
+  "reviews": {}
+}
