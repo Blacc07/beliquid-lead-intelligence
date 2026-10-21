@@ -5,7 +5,7 @@ from beliquid.automated_research import collect_research, research_record, _publ
 
 class AutomatedResearchTests(unittest.TestCase):
     def test_recent_successful_page_is_reused_for_unchanged_prospect(self):
-        payload = {"records": [prospect("Cached", website="https://example.org")]}
+        payload = {"records": [{"project_name": "Cached", "chain": "base", "contract_address": "0xcached", "website_url_candidate": "https://example.org"}]}
         page = {"final_url": "https://example.org", "text_excerpt": "Official site", "links": [], "feed_links": []}
         first = collect_research(payload, "2026-10-21T10:00:00Z", lambda url: page)
         second = collect_research(payload, "2026-10-21T11:00:00Z", lambda url: self.fail("cache should be reused"),
