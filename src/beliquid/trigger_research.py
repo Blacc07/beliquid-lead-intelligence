@@ -25,6 +25,7 @@ MAX_BYTES = 1_000_000
 MAX_FEEDS_PER_PROSPECT = 2
 MAX_ENTRIES_PER_FEED = 100
 MAX_WORKERS = 6
+TRIGGER_CACHE_VERSION = 2
 TRIGGER_TERMS = {
     "exchange_listing": ("listing", "listed on", "exchange listing", "new trading pair", "trading pair"),
     "token_launch_or_tge": ("launch", "mainnet", "token generation", "tge", "token launch"),
@@ -118,6 +119,7 @@ def _classify_trigger(text: str) -> str | None:
 
 def research_feed(record: dict[str, Any], feed_url: str, observed_at: str, fetcher=fetch_feed) -> dict[str, Any]:
     base = {
+        "cache_version": TRIGGER_CACHE_VERSION,
         "project_name": record.get("project_name", ""),
         "chain": record.get("chain", ""),
         "contract_address": record.get("contract_address", ""),
@@ -215,7 +217,7 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
             if not isinstance(feed, dict) or not isinstance(feed.get("url"), str):
                 continue
             cached = prior_feeds.get(feed["url"])
-            if cached and cached.get("fetch_status") == "success" and _within_cache_ttl(cached.get("observed_at"), cache_ttl_hours, now):
+            if cached and cached.get("cache_version") == TRIGGER_CACHE_VERSION and cached.get("fetch_status") == "success" and _within_cache_ttl(cached.get("observed_at"), cache_ttl_hours, now):
                 item = dict(cached)
                 item["reused_from_cache"] = True
                 cached_results.append(item)
@@ -251,6 +253,7 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
         })
     return {
         "schema_version": 1,
+        "cache_version": TRIGGER_CACHE_VERSION,
         "source": "RSS/Atom feeds linked from candidate project websites",
         "records_exported": len(records),
         "feeds_attempted": len(jobs),
