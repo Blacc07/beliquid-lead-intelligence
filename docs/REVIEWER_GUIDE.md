@@ -107,6 +107,19 @@ Use `config/identity_risk_reviews.json`. Supported identity statuses are `unknow
 6. Confirm `pipeline-summary.json` counts reviewed prospects and issued/withheld scores consistently. Check that outreach remains disabled. The workflow now runs `python -m beliquid.validate_review_batch --artifacts-dir artifacts --write-manifest`; this fails the job if review keys do not match the current batch, CSV/JSON fields disagree, a score is issued below the threshold, a risk hold fails to route to `manual_hold`, or outreach is enabled.
 7. Preserve `audit-manifest.json` with the exports. It records the Actions run/commit context and SHA-256 hashes of review/config inputs and generated exports. Hashes establish file integrity/provenance, not the truth of the cited evidence.
 
+## Controlled pilot-validation report
+
+Each successful pipeline run also emits `pilot-validation.json`, `pilot-validation.csv`, and `pilot-validation.md`. The report deliberately separates engineering validation (unit tests in CI, schema checks, and CSV/JSON parity) from prospect evidence quality (criterion coverage, unknowns, and review completion). It does not change reviewer statuses or establish whether sources are truthful.
+
+The record-level queue uses these process labels:
+
+- `not_started`: no criterion, identity/risk, or trigger review is recorded.
+- `in_progress`: some review exists, but required criterion evidence, identity/risk clearance, or flag resolution is incomplete.
+- `ready_for_second_review`: all six criteria have non-unknown statuses with paired evidence URLs/timestamps; identity is `verified`, risk is `clear`, identity/risk evidence is present, and no review flags remain.
+- `blocked_manual_hold`: an identity mismatch or risk concern requires human resolution.
+
+“Ready for second review” is a queueing recommendation, not proof a second reviewer has approved the record. It does not authorize outreach. Unknown statuses remain unknown, and source truth still requires human checking.
+
 ## Scoring and routing safeguards
 
 - Criterion weights remain 25 / 20 / 20 / 15 / 10 / 10.
