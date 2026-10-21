@@ -153,7 +153,16 @@ def research_solana_security(record: dict[str, Any], observed_at: str, requester
             if not isinstance(item, dict):
                 continue
             item_level = str(item.get("level") or item.get("severity") or "").strip().casefold()
-            if item_level in high_levels:
+            risk_text = f"{item.get('name') or ''} {item.get('description') or ''}".casefold()
+            # Do not turn commercial-market weakness into a security hold merely
+            # because the provider uses a severe label for a low-liquidity signal.
+            explicit_security_concerns = (
+                "rugged", "creator history of rug", "honeypot", "scam", "malicious",
+                "large amount of lp unlocked", "lp unlocked", "mint authority still enabled",
+                "freeze authority still enabled", "cannot sell", "hidden owner", "blacklist",
+            )
+            is_security_concern = any(term in risk_text for term in explicit_security_concerns)
+            if is_security_concern and (item_level in high_levels or any(term in risk_text for term in explicit_security_concerns)):
                 findings.append({"field": "risk_item", "value": str(item.get("name") or "provider risk item")[:300], "severity": "high", "description": str(item.get("description") or item.get("name") or "RugCheck high-severity risk item")[:1000]})
             elif item.get("name") or item.get("description"):
                 findings.append({"field": "risk_item", "value": str(item.get("name") or item.get("description"))[:300], "severity": "review", "description": str(item.get("description") or item.get("name"))[:1000]})
