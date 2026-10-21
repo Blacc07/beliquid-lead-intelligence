@@ -66,7 +66,7 @@ jobs:
       - name: Generate safeguard-first human research queue
         env:
           PYTHONPATH: src
-        run: python -m beliquid.research_queue --input artifacts/prospect-review.json --output-dir artifacts
+        run: python -m beliquid.research_queue --input artifacts/prospect-review.json --output-dir artifacts --reviews config/research_task_reviews.json
 
       - name: Validate review inputs, CSV/JSON parity, and audit provenance
         env:
@@ -104,7 +104,7 @@ jobs:
             echo "- Discovery source: DEX Screener latest token profiles"
             echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
             echo "- Runtime health check: validates Python runtime only; its zero discovery counts are not batch totals"
-            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
+            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, pilot-validation.csv, pilot-validation.json, pilot-validation.md, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
             echo "- Review validation: checks reviewer inputs against the current batch, reconciles CSV/JSON fields, and records input/output SHA-256 hashes"
             echo "- Research queue: manual holds first; identity/risk verification precedes commercial research; no outreach"
             echo "- Market research priority: heuristic labels only; not a qualification score or buying-intent claim"
