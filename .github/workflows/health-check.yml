@@ -59,6 +59,11 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.validate_review_batch --artifacts-dir artifacts --write-manifest
 
+      - name: Generate controlled pilot-validation report
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.pilot_validation --artifacts-dir artifacts
+
       - name: Upload complete prospect review files
         if: always()
         uses: actions/upload-artifact@v4
