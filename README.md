@@ -33,13 +33,13 @@ The workflow is also scheduled daily at 08:00 UTC. GitHub-hosted scheduled jobs 
 - The official API reference lists a rate limit of 60 requests per minute for this endpoint. This workflow makes one request per run and does not automatically retry rate-limit responses.
 - This feed returns token profile metadata, including chain ID and token address; it does not guarantee a token name or full market metrics. Until a later enrichment step resolves names, the token address is used as the explicit placeholder name.
 - A profile listing is only a discovery signal. It is not proof of project quality, liquidity need, or buying intent. Promotion/boost signals must never be treated as quality scores.
-- The adapter only treats links explicitly labelled as websites as official website candidates; social links are not substituted.
+- Website links are unverified metadata supplied by token profiles. The adapter rejects common social-platform domains even when labelled as a website, but a non-social URL is still only a candidate and must be verified before outreach.
 - Review the [DEX Screener API reference](https://docs.dexscreener.com/api/reference) and [API terms](https://docs.dexscreener.com/api/api-terms-and-conditions) before expanding commercial use or distributing data. Do not resell or expose the API service/data as a third-party API.
 
 ## Project layout
 
 - `.github/workflows/health-check.yml` — manual and scheduled check; runs tests and a live source smoke test.
-- `src/beliquid/main.py` — structured health-check entry point.
+- `src/beliquid/main.py` — runtime health-check entry point; its summary is separate from discovery counts.
 - `src/beliquid/models.py` — validated prospect and evidence records with stable deduplication keys.
 - `src/beliquid/sources/dexscreener.py` — public API client, response validation, normalization, deduplication, and CLI summary.
 - `tests/test_models.py` — tests for record validation, unknown metrics, and deduplication boundaries.
