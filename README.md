@@ -4,7 +4,7 @@ Automated discovery, qualification, scoring, and routing of potential crypto/Web
 
 ## Current status
 
-**Phase 1 foundation plus discovery, market enrichment, and a standalone scoring engine.** The workflow runs standard-library unit tests, discovers token profiles, looks up token names/symbols and market data from DEX Screener, and emits a structured summary. The scoring engine and approved starting configuration for liquidity-service qualification are implemented and tested. The live discovery/enrichment run now emits conservative qualification reports, but all six criteria remain unknown until criterion-specific evidence is reviewed; therefore scores are withheld. This is not yet a general BeLiquid sales-fit score. Records are not yet persisted, and the system does not contact leads.
+**Phase 1 foundation plus discovery, market enrichment, and a standalone scoring engine.** The workflow runs standard-library unit tests, discovers token profiles, looks up token names/symbols and market data from DEX Screener, and emits a structured summary. The scoring engine and approved starting configuration for liquidity-service qualification are implemented and tested. The live discovery/enrichment run emits conservative qualification reports and now exports the full batch as JSON and CSV GitHub Actions artifacts for manual review. All six criteria remain unknown until criterion-specific evidence is reviewed; therefore scores are withheld. This is not yet a general BeLiquid sales-fit score. Artifacts are retained for 14 days, are not a permanent database, and the system does not contact leads.
 
 ## Run locally
 
@@ -24,7 +24,7 @@ The discovery command makes one live HTTP request. The enrichment command fetche
 1. Open the **Actions** tab.
 2. Select **BeLiquid Pipeline Health Check**.
 3. Choose **Run workflow** to execute it manually.
-4. Review the unit-test output, DEX Screener discovery summary, and run summary.
+4. Review the unit-test output, discovery/enrichment summary, and runtime health summary.\n5. Open the run's **Artifacts** section and download `beliquid-prospect-review-<run number>`. It contains `prospect-review.csv` (spreadsheet-friendly), `prospect-review.json` (complete records and evidence), and `pipeline-summary.json`. Artifacts are retained for 14 days.
 
 The workflow is also scheduled daily at 08:00 UTC. GitHub-hosted scheduled jobs can be delayed and are not guaranteed to start at the exact minute. Usage limits depend on the repository's plan, runner type, and GitHub's current policies; public visibility alone does not guarantee unlimited use of every runner type.
 
@@ -45,12 +45,12 @@ The workflow is also scheduled daily at 08:00 UTC. GitHub-hosted scheduled jobs 
 - `src/beliquid/main.py` — runtime health-check entry point; its summary is separate from discovery counts.
 - `src/beliquid/models.py` — validated prospect and evidence records with stable deduplication keys.
 - `src/beliquid/sources/dexscreener.py` — profile API client, response validation, normalization, deduplication, and CLI summary.
-- `src/beliquid/sources/enrichment.py` — batched token-pair lookup, token name/symbol enrichment, market metrics, evidence provenance, and partial-failure reporting.\n- `src/beliquid/scoring.py` — configurable evidence-backed scoring primitives; unknown criteria are excluded from assessed weight, scores are withheld below an evidence-coverage threshold, and review flags remain independent of score.
+- `src/beliquid/sources/enrichment.py` — batched token-pair lookup, token name/symbol enrichment, market metrics, evidence provenance, partial-failure reporting, and review-export integration.\n- `src/beliquid/review_export.py` — full-batch CSV/JSON review exports with criterion statuses, evidence provenance, and non-judgmental research queues.\n- `src/beliquid/scoring.py` — configurable evidence-backed scoring primitives; unknown criteria are excluded from assessed weight, scores are withheld below an evidence-coverage threshold, and review flags remain independent of score.
 - `src/beliquid/qualification.py` — strict criteria-config validation and conservative scoring integration; market metrics never auto-confirm qualification criteria.
 - `tests/test_scoring.py` — offline tests for score coverage, evidence requirements, unknown values, duplicate criteria, and review flags.
 - `tests/test_models.py` — tests for record validation, unknown metrics, and deduplication boundaries.
 - `tests/test_dexscreener.py` — offline tests for normalization, malformed payloads, network failures, and rate limits.
-- `tests/test_enrichment.py` — offline tests for batched lookup, market-data selection, unknown metrics, and failed requests.
+- `tests/test_enrichment.py` — offline tests for batched lookup, market-data selection, unknown metrics, and failed requests.\n- `tests/test_review_export.py` — offline tests for complete-batch export, unknown criteria, and withheld scores.
 
 ## Data-quality rules
 
