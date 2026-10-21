@@ -35,10 +35,10 @@ jobs:
           PYTHONPATH: src
         run: python -m unittest discover -s tests -v
 
-      - name: Discover latest DEX Screener token profiles
+      - name: Discover and enrich DEX Screener token profiles
         env:
           PYTHONPATH: src
-        run: python -m beliquid.sources.dexscreener
+        run: python -m beliquid.sources.enrichment
 
       - name: Run pipeline health check
         env:
