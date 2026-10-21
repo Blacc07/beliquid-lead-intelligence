@@ -313,6 +313,7 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
         "historical_concerns_retained": historical_retained,
         "records_exported": len(results),
         "records_with_reports": sum(item["fetch_status"] == "success" for item in results),
+        "records_fetched_this_run": sum(item["fetch_status"] in {"success", "no_report"} and not item.get("reused_from_cache") for item in results),
         "records_with_high_risk_flags": sum(item["risk_status"] == "concern" for item in results),
         "records_without_reports": sum(item["fetch_status"] in {"no_report", "unsupported_chain", "missing_contract_address"} for item in results),
         "records_with_fetch_failures": sum(item["fetch_status"] in {"fetch_failed", "provider_error"} for item in results),
