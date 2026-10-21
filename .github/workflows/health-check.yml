@@ -45,6 +45,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Restore recent research state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/research-state
+          key: beliquid-research-state-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            beliquid-research-state-${{ github.ref_name }}-
+
       - name: Verify Python version
         run: python --version
 
@@ -66,17 +74,17 @@ jobs:
       - name: Collect automated public-page evidence candidates
         env:
           PYTHONPATH: src
-        run: python -m beliquid.automated_research --input artifacts/prospect-review.json --output artifacts/automated-research.json
+        run: python -m beliquid.automated_research --input artifacts/prospect-review.json --output artifacts/automated-research.json --previous .cache/research-state/automated-research.json --cache-ttl-hours 24
 
       - name: Collect automated contract-risk observations
         env:
           PYTHONPATH: src
-        run: python -m beliquid.security_research --input artifacts/prospect-review.json --output artifacts/security-research.json
+        run: python -m beliquid.security_research --input artifacts/prospect-review.json --output artifacts/security-research.json --previous .cache/research-state/security-research.json --cache-ttl-hours 24
 
       - name: Discover dated buying-trigger candidates from project feeds
         env:
           PYTHONPATH: src
-        run: python -m beliquid.trigger_research --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --output artifacts/trigger-research.json
+        run: python -m beliquid.trigger_research --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --output artifacts/trigger-research.json --previous .cache/research-state/trigger-research.json --cache-ttl-hours 24
 
       - name: Record completed automated research passes
         env:
@@ -97,6 +105,21 @@ jobs:
         env:
           PYTHONPATH: src
         run: python -m beliquid.pilot_validation --artifacts-dir artifacts
+
+      - name: Stage recent research state for the next run
+        if: always()
+        run: |
+          mkdir -p .cache/research-state
+          for name in automated-research.json security-research.json trigger-research.json research-task-ledger.json; do
+            if [ -f "artifacts/$name" ]; then cp "artifacts/$name" ".cache/research-state/$name"; fi
+          done
+
+      - name: Save recent research state cache
+        if: always() && hashFiles('.cache/research-state/*.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/research-state
+          key: beliquid-research-state-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Upload complete prospect review files
         if: always()
