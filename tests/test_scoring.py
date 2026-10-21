@@ -23,7 +23,7 @@ class SignalAssessmentTests(unittest.TestCase):
     def test_confirmed_and_not_present_require_evidence(self):
         for status in ("confirmed", "not_present"):
             with self.subTest(status=status), self.assertRaises(ValueError):
-                SignalAssessment("fit", 10, status, (URL,), evidence_timestamps=(TIMESTAMP,))
+                SignalAssessment("fit", 10, status)
 
     def test_rejects_invalid_evidence_url(self):
         with self.assertRaises(ValueError):
