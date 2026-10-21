@@ -27,6 +27,7 @@ MAX_BYTES = 1_000_000
 TIMEOUT_SECONDS = 8
 MAX_LINKS = 40
 MAX_TEXT = 20_000
+RESEARCH_CACHE_VERSION = 2
 TRIGGER_TERMS = (
     "launch", "listing", "mainnet", "testnet", "token generation", "tge",
     "liquidity", "market maker", "exchange", "trading pair", "partnership",
