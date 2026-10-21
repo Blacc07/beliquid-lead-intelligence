@@ -38,13 +38,26 @@ def _source_record_map(payload: Any, label: str) -> dict[str, dict[str, Any]]:
 
 
 def _completion(task: str, record: dict[str, Any], evidence: list[tuple[str, str]], outcome: str, now: str) -> dict[str, Any] | None:
-    pairs = [(url, timestamp) for url, timestamp in evidence if isinstance(url, str) and url.startswith(("https://", "http://")) and isinstance(timestamp, str) and timestamp.strip()]
+    pairs = []
+    parsed_timestamps = []
+    for url, timestamp in evidence:
+        if not isinstance(url, str) or not url.startswith(("https://", "http://")) or not isinstance(timestamp, str) or not timestamp.strip():
+            continue
+        try:
+            parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            continue
+        pairs.append((url, timestamp))
+        parsed_timestamps.append(parsed.astimezone(timezone.utc))
     if not pairs:
         return None
+    completed_at = max(parsed_timestamps).isoformat() if parsed_timestamps else now
     return {
         "status": "completed",
         "reviewer": "automated-research-pipeline",
-        "completed_at": now,
+        "completed_at": completed_at,
         "outcome": outcome,
         "evidence_urls": [url for url, _ in pairs],
         "evidence_timestamps": [stamp for _, stamp in pairs],
