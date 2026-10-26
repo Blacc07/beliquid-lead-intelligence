@@ -93,7 +93,7 @@ def build_task_ledger(
     historical_reviews: dict[str, dict[str, Any]] = {
         str(old_key).strip().casefold(): dict(old_tasks)
         for old_key, old_tasks in previous_history.items()
-        if isinstance(old_tasks, dict)
+        if isinstance(old_tasks, dict) and str(old_key).strip().casefold() not in current_keys
     }
     ledger: dict[str, dict[str, Any]] = {}
     for record in records:
