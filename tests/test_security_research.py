@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from beliquid.security_research import collect_security, research_goplus_solana, research_honeypot_is, research_security
+from beliquid.security_research import SECURITY_CACHE_VERSION, collect_security, research_goplus_solana, research_honeypot_is, research_security
 
 
 class SecurityResearchTests(unittest.TestCase):
@@ -180,7 +180,7 @@ class SecurityResearchTests(unittest.TestCase):
         row = {"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"}
         payload = {"mint": "So111", "riskLevel": "Good", "risks": []}
         previous = collect_security({"records": [row]}, "2026-10-21T10:00:00Z", lambda url: payload)
-        previous["records"][0]["cache_version"] = 1
+        previous["records"][0]["cache_version"] = SECURITY_CACHE_VERSION - 1
         current = collect_security({"records": [row]}, "2026-10-21T11:00:00Z", lambda url: payload,
                                    previous_payload=previous, cache_ttl_hours=24)
         self.assertEqual(current["records_fetched_this_run"], 1)
