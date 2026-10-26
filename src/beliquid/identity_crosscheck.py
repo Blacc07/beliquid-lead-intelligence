@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 import re
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from beliquid.automated_research import _fetch_with_retries, fetch_page
 
@@ -86,9 +86,13 @@ def crosscheck_record(prospect: dict[str, Any], public_record: dict[str, Any] | 
     name_match = bool(project_name and len(project_name) >= 4 and project_name.casefold() in metadata.casefold())
     contract_on_candidate_site = bool((public_record or {}).get("page", {}).get("contract_address_mentioned"))
     candidate_domain = _host(candidate_url)
-    explorer_domains = sorted({_host(link.get("url")) for link in page.get("links", [])
-                               if isinstance(link, dict) and _host(link.get("url"))
-                               and _host(link.get("url")) not in {urlparse(explorer_url).hostname, "etherscan.io", "bscscan.com", "basescan.org", "polygonscan.com", "arbiscan.io", "optimistic.etherscan.io", "solscan.io"}})
+    final_explorer_url = page.get("final_url") or explorer_url
+    explorer_domains = sorted({_host(urljoin(final_explorer_url, link.get("href", ""))) for link in page.get("links", [])
+                               if isinstance(link, dict) and _host(urljoin(final_explorer_url, link.get("href", "")))
+                               and _host(urljoin(final_explorer_url, link.get("href", ""))) not in {
+                                   "etherscan.io", "bscscan.com", "basescan.org", "polygonscan.com",
+                                   "arbiscan.io", "optimistic.etherscan.io", "solscan.io"
+                               }})
     candidate_domain_listed = bool(candidate_domain and candidate_domain in explorer_domains)
     public_links = (public_record or {}).get("source_candidates", [])
     account_links = []
