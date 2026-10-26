@@ -167,14 +167,10 @@ def build_task_ledger(
         normalized_key = str(old_key).strip().casefold()
         if normalized_key not in current_keys and isinstance(old_tasks, dict):
             historical_reviews[normalized_key] = dict(old_tasks)
-        elif normalized_key in current_keys and normalized_key not in ledger and isinstance(old_tasks, dict):
-            ledger[normalized_key] = dict(old_tasks)
     for old_key, old_tasks in previous_history.items():
         normalized_key = str(old_key).strip().casefold()
         if normalized_key not in current_keys and isinstance(old_tasks, dict):
             historical_reviews.setdefault(normalized_key, dict(old_tasks))
-        elif normalized_key in current_keys and normalized_key not in ledger and isinstance(old_tasks, dict):
-            ledger[normalized_key] = dict(old_tasks)
 
     return {
         "schema_version": 1,
