@@ -25,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: beliquid-pipeline-health-check
@@ -52,6 +53,43 @@ jobs:
           key: beliquid-research-state-${{ github.ref_name }}-${{ github.run_id }}
           restore-keys: |
             beliquid-research-state-${{ github.ref_name }}-
+
+      - name: Restore durable task ledger from repository issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '.cache/research-state/research-task-ledger.json';
+            const title = '[automation-state] BeLiquid research task ledger';
+            const start = '<!-- beliquid-task-ledger:start -->';
+            const end = '<!-- beliquid-task-ledger:end -->';
+            const response = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
+            });
+            const issue = response.data.find(item => !item.pull_request && item.title === title);
+            if (issue) {
+              const body = issue.body || '';
+              const a = body.indexOf(start);
+              const b = body.indexOf(end);
+              if (a >= 0 && b > a) {
+                try {
+                  const ledger = JSON.parse(body.slice(a + start.length, b).trim());
+                  if (ledger && typeof ledger === 'object' && ledger.schema_version === 1 && ledger.reviews && typeof ledger.reviews === 'object') {
+                    fs.mkdirSync('.cache/research-state', { recursive: true });
+                    fs.writeFileSync(path, JSON.stringify(ledger, null, 2) + '\n');
+                    core.info(`Restored durable research ledger from issue #${issue.number}; active=${Object.keys(ledger.reviews).length}, historical=${Object.keys(ledger.historical_reviews || {}).length}`);
+                  } else {
+                    core.warning('Durable issue ledger had an unexpected schema; retaining cache state.');
+                  }
+                } catch (error) {
+                  core.warning(`Could not parse durable issue ledger; retaining cache state: ${error.message}`);
+                }
+              } else {
+                core.warning('Durable issue exists but has no ledger markers; retaining cache state.');
+              }
+            } else {
+              core.info('No durable ledger issue exists yet; using the branch cache until the first trusted-run persistence step.');
+            }
 
       - name: Verify Python version
         run: python --version
@@ -145,6 +183,63 @@ jobs:
           path: artifacts/
           if-no-files-found: warn
           retention-days: 14
+
+  persist-research-state:
+    name: Persist durable task ledger
+    needs: health-check
+    if: success() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Download this run's research artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: beliquid-prospect-review-${{ github.run_number }}
+          path: artifacts
+
+      - name: Persist task ledger in repository issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const ledger = JSON.parse(fs.readFileSync('artifacts/research-task-ledger.json', 'utf8'));
+            if (!ledger || ledger.schema_version !== 1 || !ledger.reviews || typeof ledger.reviews !== 'object') {
+              throw new Error('Task ledger artifact has an invalid schema; refusing to persist.');
+            }
+            const start = '<!-- beliquid-task-ledger:start -->';
+            const end = '<!-- beliquid-task-ledger:end -->';
+            const title = '[automation-state] BeLiquid research task ledger';
+            const snapshot = JSON.stringify(ledger, null, 2);
+            const body = [
+              'Durable, machine-readable task state for the BeLiquid Lead Intelligence pipeline.',
+              '',
+              'This issue body is updated by successful trusted GitHub Actions runs. Research completion records mean the source task ran; they do not mean identity is verified, risk is clear, or a prospect is qualified.',
+              '',
+              `Last persisted run: ${context.runId} (run #${context.runNumber})`,
+              `Active prospects: ${Object.keys(ledger.reviews).length}; historical prospects: ${Object.keys(ledger.historical_reviews || {}).length}`,
+              '',
+              start,
+              snapshot,
+              end,
+              '',
+              'Do not add credentials or secrets to this issue.'
+            ].join('\n');
+            if (body.length > 60000) {
+              throw new Error(`Ledger body is too large for safe issue persistence (${body.length} characters).`);
+            }
+            const response = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
+            });
+            const issue = response.data.find(item => !item.pull_request && item.title === title);
+            if (issue) {
+              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number, body });
+              core.info(`Updated durable task ledger issue #${issue.number}.`);
+            } else {
+              const created = await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
+              core.info(`Created durable task ledger issue #${created.data.number}.`);
+            }
 
       - name: Record run summary
         if: always()
