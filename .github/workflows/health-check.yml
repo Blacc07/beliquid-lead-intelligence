@@ -36,6 +36,9 @@ jobs:
     name: Validate Python pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
 
     steps:
       - name: Check out repository
@@ -176,8 +179,49 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.pilot_validation --artifacts-dir artifacts
 
-      - name: Send generated lead digest to Telegram DM
+      - name: Check whether this digest was already delivered
+        id: telegram-dedupe
         if: success() && github.event_name != 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const crypto = require('crypto');
+            const title = '[automation-state] BeLiquid research task ledger';
+            const response = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
+            });
+            const issue = response.data.find(item => !item.pull_request && item.title === title);
+            if (!issue) throw new Error('Durable ledger issue is missing; refusing to send an untracked Telegram digest.');
+            const payload = JSON.parse(fs.readFileSync('artifacts/prospect-review.json', 'utf8'));
+            if (!Array.isArray(payload.records)) throw new Error('Prospect export has no records array.');
+            const rows = payload.records.map(record => ({
+              key: [record.chain, record.contract_address || record.token_address || record.project_name].map(value => String(value || '').trim().toLowerCase()).join(':'),
+              project: String(record.project_name || '').trim().toLowerCase(),
+              symbol: String(record.token_symbol || '').trim().toLowerCase(),
+              priority: String((record.market_research_priority || {}).priority || 'unknown').toLowerCase(),
+              score: record.qualification && record.qualification.score_percent != null ? String(record.qualification.score_percent) : 'withheld'
+            })).sort((a, b) => a.key.localeCompare(b.key));
+            const fingerprint = crypto.createHash('sha256').update(JSON.stringify(rows)).digest('hex');
+            const marker = '<!-- beliquid-telegram-digest:' + fingerprint + ' -->';
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number, per_page: 100
+            });
+            const alreadySent = comments.some(comment => (comment.body || '').includes(marker));
+            core.setOutput('issue_number', String(issue.number));
+            core.setOutput('fingerprint', fingerprint);
+            core.setOutput('marker', marker);
+            core.setOutput('should_send', alreadySent ? 'false' : 'true');
+            if (alreadySent) {
+              core.info('Telegram digest skipped: this prospect-batch fingerprint was already delivered.');
+              await core.summary.addBullet('Telegram delivery: skipped duplicate prospect-batch digest.').write();
+            } else {
+              core.info('No prior successful Telegram receipt for this prospect-batch fingerprint.');
+            }
+
+      - name: Send generated lead digest to Telegram DM
+        id: telegram-send
+        if: success() && github.event_name != 'pull_request' && steps.telegram-dedupe.outputs.should_send == 'true'
         env:
           PYTHONPATH: src
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -188,13 +232,39 @@ jobs:
           python -m beliquid.telegram_digest --input artifacts/prospect-review.json
           result=$?
           if [ "$result" -eq 2 ]; then
+            echo "delivery_status=skipped" >> "$GITHUB_OUTPUT"
             echo "- Telegram delivery: skipped; configure TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID repository secrets." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           if [ "$result" -eq 0 ]; then
+            echo "delivery_status=sent" >> "$GITHUB_OUTPUT"
             echo "- Telegram delivery: digest sent successfully." >> "$GITHUB_STEP_SUMMARY"
           fi
           exit "$result"
+
+      - name: Record successful Telegram delivery receipt
+        if: success() && github.event_name != 'pull_request' && steps.telegram-dedupe.outputs.should_send == 'true' && steps.telegram-send.outputs.delivery_status == 'sent'
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.telegram-dedupe.outputs.issue_number }}
+          DIGEST_FINGERPRINT: ${{ steps.telegram-dedupe.outputs.fingerprint }}
+          DIGEST_MARKER: ${{ steps.telegram-dedupe.outputs.marker }}
+        with:
+          script: |
+            const body = [
+              'Telegram accepted a BeLiquid research digest for this candidate-batch fingerprint.',
+              '',
+              process.env.DIGEST_MARKER,
+              'Fingerprint: ' + process.env.DIGEST_FINGERPRINT,
+              'Run: ' + context.serverUrl + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId,
+              '',
+              'This receipt records delivery acceptance only; it does not verify candidate identity, risk, qualification, or Telegram inbox visibility.'
+            ].join('\n');
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: Number(process.env.ISSUE_NUMBER), body
+            });
+            core.info('Recorded successful Telegram digest receipt in the durable ledger issue.');
 
       - name: Stage recent research state for the next run
         if: always()
