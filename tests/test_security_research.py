@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from beliquid.security_research import collect_security, research_security
+from beliquid.security_research import collect_security, research_honeypot_is, research_security
 
 
 class SecurityResearchTests(unittest.TestCase):
@@ -17,6 +17,37 @@ class SecurityResearchTests(unittest.TestCase):
                                    "2026-10-21T12:00:00Z", lambda url: {"code": 1, "result": {}})
         self.assertEqual(result["fetch_status"], "no_report")
         self.assertEqual(result["risk_status"], "unknown")
+
+    def test_honeypot_is_independent_high_risk_signal_is_concern(self):
+        payload = {"honeypotResult": {"isHoneypot": True},
+                   "simulationResult": {"buyTax": 2, "sellTax": 3},
+                   "contractCode": {"openSource": True}}
+        result = research_honeypot_is({"project_name": "X", "chain": "base", "contract_address": "0xabc"},
+                                      "2026-10-21T12:00:00Z", lambda url: payload)
+        self.assertEqual(result["provider"], "Honeypot.is token simulation")
+        self.assertEqual(result["fetch_status"], "success")
+        self.assertEqual(result["risk_status"], "concern")
+        self.assertTrue(result["provider_url"].startswith("https://api.honeypot.is/v2/IsHoneypot?"))
+
+    def test_honeypot_is_failure_stays_unknown(self):
+        result = research_honeypot_is({"project_name": "X", "chain": "base", "contract_address": "0xabc"},
+                                      "2026-10-21T12:00:00Z", lambda url: (_ for _ in ()).throw(TimeoutError()))
+        self.assertEqual(result["fetch_status"], "fetch_failed")
+        self.assertEqual(result["risk_status"], "unknown")
+
+    def test_honeypot_is_high_risk_is_merged_with_goplus_observation(self):
+        calls = []
+        def requester(url):
+            calls.append(url)
+            if "gopluslabs" in url:
+                return {"code": 1, "result": {"0xabc": {"is_honeypot": "0"}}}
+            return {"honeypotResult": {"isHoneypot": True}, "simulationResult": {"sellTax": 1}}
+        result = research_security({"project_name": "X", "chain": "base", "contract_address": "0xabc"},
+                                   "2026-10-21T12:00:00Z", requester)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(result["risk_status"], "concern")
+        self.assertEqual(result["independent_provider_count"], 2)
+        self.assertEqual(result["independent_sources"][1]["provider"], "Honeypot.is token simulation")
 
     def test_high_severity_provider_flag_is_a_concern(self):
         payload = {"code": 1, "result": {"0xabc": {"is_honeypot": "1", "is_mintable": "1"}}}
