@@ -91,7 +91,8 @@ def _corroborated_pairs(candidates: list[dict[str, Any]], prospect: dict[str, An
 
 
 def assess_criterion_reviews(prospect_payload: dict[str, Any], trigger_payload: dict[str, Any],
-                             criteria_config: dict[str, Any], generated_at: str | None = None) -> dict[str, Any]:
+                             criteria_config: dict[str, Any], generated_at: str | None = None,
+                             identity_payload: dict[str, Any] | None = None) -> dict[str, Any]:
     prospects = prospect_payload.get("records")
     trigger_records = trigger_payload.get("records")
     criteria = criteria_config.get("criteria")
@@ -102,11 +103,16 @@ def assess_criterion_reviews(prospect_payload: dict[str, Any], trigger_payload: 
     if not isinstance(criteria, list) or len(criteria) != 6 or sum(item.get("weight", 0) for item in criteria) != 100:
         raise ValueError("criteria configuration must preserve the six weighted criteria totaling 100")
     trigger_map = {_key(item): item for item in trigger_records}
+    identity_records = identity_payload.get("records", []) if isinstance(identity_payload, dict) else []
+    if not isinstance(identity_records, list) or any(not isinstance(item, dict) for item in identity_records):
+        raise ValueError("identity cross-check payload must contain a records list of objects")
+    identity_map = {_key(item): item for item in identity_records}
     reviews: dict[str, dict[str, Any]] = {}
     reports = []
     for prospect in prospects:
         key = _key(prospect)
         trigger_record = trigger_map.get(key, {})
+        identity_record = identity_map.get(key, {})
         candidates = trigger_record.get("trigger_candidates", [])
         if not isinstance(candidates, list):
             candidates = []
@@ -121,6 +127,18 @@ def assess_criterion_reviews(prospect_payload: dict[str, Any], trigger_payload: 
             note = "No deterministic assessment rule was satisfied; criterion remains unknown."
             rule_id = None
             eligible_pairs = []
+            if criterion_key == "project_credibility_and_team_access":
+                identity = identity_record.get("identity_candidate_assessment") or {}
+                if identity.get("status") == "corroborated_candidate":
+                    evidence_urls = identity.get("source_urls", [])
+                    observed = identity_record.get("observed_at")
+                    if len(evidence_urls) >= 3 and observed and all(isinstance(url, str) and url.startswith("https://") for url in evidence_urls):
+                        status = "confirmed"
+                        urls = list(dict.fromkeys(evidence_urls))
+                        timestamps = [observed] * len(urls)
+                        note = ("Deterministic positive assessment: candidate site mentions the contract, chain-explorer metadata matches the token symbol, "
+                                "the explorer lists the candidate domain, and linked public account/contact paths are present. Canonical identity remains unresolved.")
+                        rule_id = "candidate_site_explorer_domain_symbol_account_contact_crosscheck"
             for left, right in pairs:
                 text = f"{left.get('title') or ''} {left.get('summary_excerpt') or ''} {right.get('title') or ''} {right.get('summary_excerpt') or ''}".casefold()
                 if criterion_key == "buying_trigger_and_timing" and any(term in text for term in TRIGGER_TERMS):
@@ -140,6 +158,7 @@ def assess_criterion_reviews(prospect_payload: dict[str, Any], trigger_payload: 
                 note = ("Deterministic positive assessment: two distinct allowlisted news publishers reported a similar dated event "
                         "within 72 hours, with strong entity matching and overlapping title terms. This confirms only the cited "
                         "criterion evidence; it does not verify official identity, clear security risk, or authorize outreach.")
+                rule_id = rule_id or "two_independent_dated_news_sources"
             if status != "unknown":
                 criterion_reviews[criterion_key] = {
                     "status": status, "evidence_urls": urls, "evidence_timestamps": timestamps,
@@ -174,13 +193,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", type=Path, default=Path("artifacts/prospect-review.json"))
     parser.add_argument("--triggers", type=Path, default=Path("artifacts/trigger-research.json"))
+    parser.add_argument("--identity-crosscheck", type=Path, default=Path("artifacts/identity-crosscheck.json"))
     parser.add_argument("--criteria", type=Path, default=Path("config/qualification_criteria.json"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/automated-criterion-assessment.json"))
     parser.add_argument("--reviews-output", type=Path, default=Path("artifacts/automated-criterion-reviews.json"))
     args = parser.parse_args()
     try:
+        identity = json.loads(args.identity_crosscheck.read_text(encoding="utf-8")) if args.identity_crosscheck.is_file() else None
         result = assess_criterion_reviews(json.loads(args.input.read_text(encoding="utf-8")),
-            json.loads(args.triggers.read_text(encoding="utf-8")), json.loads(args.criteria.read_text(encoding="utf-8")))
+            json.loads(args.triggers.read_text(encoding="utf-8")), json.loads(args.criteria.read_text(encoding="utf-8")),
+            identity_payload=identity)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         args.reviews_output.write_text(json.dumps(result["criterion_reviews"], indent=2, sort_keys=True) + "\n", encoding="utf-8")
