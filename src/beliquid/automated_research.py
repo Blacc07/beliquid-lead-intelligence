@@ -14,6 +14,7 @@ import ipaddress
 import json
 import logging
 import socket
+import time
 from pathlib import Path
 import re
 from urllib.error import HTTPError, URLError
@@ -25,6 +26,8 @@ LOGGER = logging.getLogger(__name__)
 USER_AGENT = "BeLiquid-Lead-Intelligence/0.1 (+https://github.com/Blacc07/beliquid-lead-intelligence)"
 MAX_BYTES = 1_000_000
 TIMEOUT_SECONDS = 8
+MAX_FETCH_ATTEMPTS = 3
+RETRY_BACKOFF_SECONDS = (0.25, 0.5)
 MAX_LINKS = 40
 MAX_TEXT = 20_000
 RESEARCH_CACHE_VERSION = 2
@@ -166,6 +169,29 @@ def _within_cache_ttl(observed_at: Any, ttl_hours: float, now: datetime) -> bool
     return 0 <= age <= ttl_hours * 3600
 
 
+
+def _is_retryable_fetch_error(exc: Exception) -> bool:
+    """Retry only transient transport/server failures, never invalid URLs or content."""
+    if isinstance(exc, HTTPError):
+        return exc.code in {408, 425, 429} or 500 <= exc.code <= 599
+    return isinstance(exc, (URLError, TimeoutError, OSError))
+
+
+def _fetch_with_retries(url: str, fetcher: Callable[[str], dict[str, Any]], attempts: int = MAX_FETCH_ATTEMPTS) -> dict[str, Any]:
+    last_error: Exception | None = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return fetcher(url)
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
+            last_error = exc
+            if not _is_retryable_fetch_error(exc) or attempt + 1 >= max(1, attempts):
+                raise
+            time.sleep(RETRY_BACKOFF_SECONDS[min(attempt, len(RETRY_BACKOFF_SECONDS) - 1)])
+    if last_error:
+        raise last_error
+    raise RuntimeError("fetch retry loop ended without a result")
+
+
 def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[[str], dict[str, Any]] = fetch_page) -> dict[str, Any]:
     candidate = record.get("website_url_candidate")
     output: dict[str, Any] = {
@@ -194,7 +220,7 @@ def research_record(record: dict[str, Any], observed_at: str, fetcher: Callable[
         output["research_note"] = "No candidate website URL was available; identity and risk remain unknown."
         return output
     try:
-        page = fetcher(candidate)
+        page = _fetch_with_retries(candidate, fetcher)
     except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
         output["fetch_status"] = "fetch_failed"
         output["research_note"] = f"Public-page collection failed ({type(exc).__name__}); identity and risk remain unknown."
