@@ -114,6 +114,11 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.automated_research --input artifacts/prospect-review.json --output artifacts/automated-research.json --previous .cache/research-state/automated-research.json --cache-ttl-hours 24
 
+      - name: Cross-check project identity against chain-explorer metadata
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.identity_crosscheck --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --output artifacts/identity-crosscheck.json
+
       - name: Collect automated contract-risk observations
         env:
           PYTHONPATH: src
@@ -128,7 +133,7 @@ jobs:
       - name: Assess criteria from corroborated dated news evidence
         env:
           PYTHONPATH: src
-        run: python -m beliquid.automated_criterion_assessment --input artifacts/prospect-review.json --triggers artifacts/trigger-research.json --criteria config/qualification_criteria.json --output artifacts/automated-criterion-assessment.json --reviews-output artifacts/automated-criterion-reviews.json
+        run: python -m beliquid.automated_criterion_assessment --input artifacts/prospect-review.json --triggers artifacts/trigger-research.json --identity-crosscheck artifacts/identity-crosscheck.json --criteria config/qualification_criteria.json --output artifacts/automated-criterion-assessment.json --reviews-output artifacts/automated-criterion-reviews.json
 
       - name: Rebuild final prospect exports with deterministic assessments
         env:
@@ -143,7 +148,7 @@ jobs:
       - name: Record completed automated research passes
         env:
           PYTHONPATH: src
-        run: python -m beliquid.task_ledger --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --previous .cache/research-state/research-task-ledger.json --output artifacts/research-task-ledger.json
+        run: python -m beliquid.task_ledger --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --identity-crosscheck artifacts/identity-crosscheck.json --previous .cache/research-state/research-task-ledger.json --output artifacts/research-task-ledger.json
 
       - name: Generate automated research queue
         env:
@@ -258,7 +263,7 @@ jobs:
             echo "- Discovery source: DEX Screener latest token profiles"
             echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
             echo "- Runtime health check: validates Python runtime only; its zero discovery counts are not batch totals"
-            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, automated-research.json, security-research.json, trigger-research.json, automated-criterion-assessment.json, automated-criterion-reviews.json, criterion-evidence.json, research-task-ledger.json, pilot-validation.csv, pilot-validation.json, pilot-validation.md, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
+            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, automated-research.json, identity-crosscheck.json, security-research.json, trigger-research.json, automated-criterion-assessment.json, automated-criterion-reviews.json, criterion-evidence.json, research-task-ledger.json, pilot-validation.csv, pilot-validation.json, pilot-validation.md, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
             echo "- Review validation: checks inputs against the current batch, reconciles CSV/JSON fields, and records input/output SHA-256 hashes"
             echo "- Research queue: no mandatory human review; unresolved identity/risk excluded from cleared list; documented concerns remain held"
             echo "- Market research priority: heuristic labels only; not a qualification score or buying-intent claim"
