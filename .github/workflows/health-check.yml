@@ -55,6 +55,7 @@ jobs:
             beliquid-research-state-${{ github.ref_name }}-
 
       - name: Restore durable task ledger from repository issue
+        id: restore-ledger
         uses: actions/github-script@v7
         with:
           script: |
@@ -70,7 +71,7 @@ jobs:
               });
             } catch (error) {
               core.warning(`Could not read durable ledger issue; retaining cache state: ${error.message}`);
-              response = { data: [] };
+              response = { data: [], readFailed: true };
             }
             const issue = response.data.find(item => !item.pull_request && item.title === title);
             if (issue) {
@@ -93,9 +94,12 @@ jobs:
               } else {
                 core.warning('Durable issue exists but has no ledger markers; retaining cache state.');
               }
+            } else if (response.readFailed) {
+              core.info('Durable ledger issue lookup failed; issue absence is unknown; retaining cache state.');
             } else {
               core.info('No durable ledger issue exists yet; using the branch cache until the first trusted-run persistence step.');
             }
+            core.setOutput('restore_status', response.readFailed ? 'read_failed' : (issue ? 'issue_found' : 'missing'));
 
       - name: Verify Python version
         run: python --version
@@ -258,6 +262,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           RUN_NUMBER: ${{ github.run_number }}
           EVENT_NAME: ${{ github.event_name }}
+          DURABLE_RESTORE_STATUS: ${{ steps.restore-ledger.outputs.restore_status }}
         run: |
           {
             echo "## BeLiquid Pipeline Health Check"
@@ -265,6 +270,7 @@ jobs:
             echo "- Run number: ${RUN_NUMBER}"
             echo "- Trigger: ${EVENT_NAME}"
             echo "- Job status: ${JOB_STATUS}"
+            echo "- Durable ledger lookup status: ${DURABLE_RESTORE_STATUS:-not-reported} (lookup status is not proof of a successful write-and-restore test)"
             echo "- Python: 3.12"
             echo "- Discovery source: DEX Screener latest token profiles"
             echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
