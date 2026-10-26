@@ -99,7 +99,8 @@ jobs:
             } else {
               core.info('No durable ledger issue exists yet; using the branch cache until the first trusted-run persistence step.');
             }
-            core.setOutput('restore_status', response.readFailed ? 'read_failed' : (issue ? 'issue_found' : 'missing'));
+            const ledgerIssueFound = Boolean(response && response.data.some(item => !item.pull_request && item.title === title));
+            core.setOutput('restore_status', response.readFailed ? 'read_failed' : (ledgerIssueFound ? 'issue_found' : 'missing'));
 
       - name: Verify Python version
         run: python --version
