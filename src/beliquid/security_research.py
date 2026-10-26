@@ -423,13 +423,26 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
         if prior_concern and current.get("risk_status") != "concern":
             prior_findings = prior.get("findings") if isinstance(prior.get("findings"), list) else []
             current_findings = current.get("findings") if isinstance(current.get("findings"), list) else []
+            prior_sources = prior.get("independent_sources") if isinstance(prior.get("independent_sources"), list) else []
+            prior_secondary_findings = [
+                {**finding, "provider": source.get("provider")}
+                for source in prior_sources if isinstance(source, dict)
+                for finding in (source.get("findings") if isinstance(source.get("findings"), list) else [])
+                if isinstance(finding, dict) and finding.get("severity") == "high"
+            ]
             current.update({
                 "risk_status": "concern",
                 "historical_concern_retained": True,
                 "prior_concern_observed_at": prior.get("observed_at"),
                 "prior_concern_provider": prior.get("provider"),
+                "historical_concern_sources": [
+                    {"provider": prior.get("provider"), "provider_url": prior.get("provider_url"), "observed_at": prior.get("observed_at")}
+                ] + [
+                    {"provider": source.get("provider"), "provider_url": source.get("provider_url"), "observed_at": source.get("observed_at")}
+                    for source in prior_sources if isinstance(source, dict) and source.get("risk_status") == "concern"
+                ],
                 "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "candidate_only", "source_scoped_risk_status": "concern", "evidence_url": prior.get("provider_url"), "observed_at": prior.get("observed_at"), "note": "A prior high-severity concern remains active until explicitly resolved."},
-                "findings": prior_findings + current_findings,
+                "findings": prior_findings + prior_secondary_findings + current_findings,
                 "research_note": "A prior high-severity concern is retained because the latest source result did not explicitly resolve it. A source outage or clean single-provider report does not silently clear a documented concern.",
             })
             historical_retained += 1
