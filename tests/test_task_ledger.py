@@ -79,6 +79,32 @@ class TaskLedgerTests(unittest.TestCase):
         self.assertEqual(tasks["verify_identity_and_risk"]["evidence_urls"], ["https://api.gopluslabs.io/api/v1/token_security/1"])
         self.assertFalse(result["policy"]["identity_and_risk_clearance_changed"])
 
+    def test_prior_completions_persist_when_current_sources_fail(self):
+        row = prospect("persist")
+        public = {"records": [{
+            "project_name": "persist", "chain": "ethereum", "contract_address": row["contract_address"],
+            "fetch_status": "success", "observed_at": STAMP,
+            "page": {"final_url": "https://persist.example/"},
+        }]}
+        security = {"records": [{
+            "project_name": "persist", "chain": "ethereum", "contract_address": row["contract_address"],
+            "fetch_status": "no_report", "provider_url": "https://security.example/report",
+            "observed_at": STAMP,
+        }]}
+        trigger = {"records": [{
+            "project_name": "persist", "chain": "ethereum", "contract_address": row["contract_address"],
+            "feed_results": [{"fetch_status": "success", "final_feed_url": "https://persist.example/feed.xml", "observed_at": STAMP}],
+        }]}
+        first = build_task_ledger({"records": [row]}, public, security, STAMP, trigger)
+        second = build_task_ledger({"records": [row]}, {"records": []}, {"records": []},
+                                   "2026-10-22T12:00:00Z", {"records": []}, previous_payload=first)
+        tasks = second["reviews"]["ethereum:0xpersist"]
+        self.assertIn("verify_identity_and_risk", tasks)
+        self.assertIn("investigate_market_quality", tasks)
+        self.assertIn("research_buying_triggers", tasks)
+        self.assertEqual(tasks["verify_identity_and_risk"]["input_fingerprint"],
+                         first["reviews"]["ethereum:0xpersist"]["verify_identity_and_risk"]["input_fingerprint"])
+
     def test_ledger_rejects_duplicate_source_records(self):
         row = prospect("delta")
         duplicate = {"records": [{"chain": "ethereum", "contract_address": row["contract_address"]}] * 2}
