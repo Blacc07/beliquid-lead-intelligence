@@ -63,6 +63,19 @@ class AutomatedCriterionAssessmentTests(unittest.TestCase):
             loaded = load_criterion_reviews(path, CRITERIA)
         self.assertEqual(loaded["base:0xabc123456789abcdef"]["buying_trigger_and_timing"]["status"], "confirmed")
 
+    def test_strong_identity_crosscheck_confirms_credibility_only(self):
+        identity = {"records": [{"chain": "base", "contract_address": "0xabc123456789abcdef",
+            "observed_at": STAMP2, "identity_candidate_assessment": {"status": "corroborated_candidate",
+            "source_urls": ["https://alpha.example", "https://basescan.org/token/0xabc123456789abcdef",
+                            "https://x.com/AlphaProtocol", "https://alpha.example/contact"]}}]}
+        result = assess_criterion_reviews(self.prospect, {"records": []}, CRITERIA, STAMP2,
+                                          identity_payload=identity)
+        reviews = result["criterion_reviews"]["reviews"]["base:0xabc123456789abcdef"]
+        self.assertEqual(reviews["project_credibility_and_team_access"]["status"], "confirmed")
+        self.assertEqual(len(reviews["project_credibility_and_team_access"]["evidence_urls"]), 4)
+        self.assertEqual(result["records"][0]["score_coverage_percent"], 15)
+        self.assertEqual(result["records"][0]["score_status"], "withheld_insufficient_evidence")
+
     def test_single_source_does_not_confirm_criterion(self):
         trigger = {"records": [{"chain": "base", "contract_address": "0xabc123456789abcdef",
                                 "trigger_candidates": [self.candidate1]}]}
