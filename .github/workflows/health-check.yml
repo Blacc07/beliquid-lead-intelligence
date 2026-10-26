@@ -79,6 +79,7 @@ jobs:
       - name: Collect automated contract-risk observations
         env:
           PYTHONPATH: src
+          GOPLUS_ACCESS_TOKEN: ${{ secrets.GOPLUS_ACCESS_TOKEN }}
         run: python -m beliquid.security_research --input artifacts/prospect-review.json --output artifacts/security-research.json --previous .cache/research-state/security-research.json --cache-ttl-hours 24
 
       - name: Discover dated buying-trigger candidates from project feeds
