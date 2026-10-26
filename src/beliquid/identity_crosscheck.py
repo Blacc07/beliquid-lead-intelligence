@@ -134,13 +134,16 @@ def crosscheck_record(prospect: dict[str, Any], public_record: dict[str, Any] | 
                             0.2 if candidate_domain_listed else 0,
                             0.1 if account_links else 0,
                             0.1 if contact_links else 0]), 2)
-    result.update(fetch_status="success", explorer_page={"final_url": page.get("final_url") or explorer_url,
-        "page_title": title[:500], "metadata_excerpt": metadata[:2000], "linked_domains": explorer_domains},
-        "identity_candidate_assessment":{"status": status, "confidence": confidence, "confidence_is_probability": False,
+    result.update({
+        "fetch_status": "success",
+        "explorer_page": {"final_url": page.get("final_url") or explorer_url,
+            "page_title": title[:500], "metadata_excerpt": metadata[:2000], "linked_domains": explorer_domains},
+        "identity_candidate_assessment": {"status": status, "confidence": confidence, "confidence_is_probability": False,
             "signals": signals, "conflicts": conflicts, "source_urls": [url for url in (candidate_url, page.get("final_url") or explorer_url, *account_links, *contact_links) if url],
             "observed_at": observed_at, "note": "Even a corroborated candidate is not canonical identity verification; only source evidence is recorded."},
         "account_link_candidates": sorted(set(account_links)), "contact_route_candidates": sorted(set(contact_links)),
-        "research_note": "Explorer and candidate-site comparisons are corroboration signals only; canonical identity remains unchanged.")
+        "research_note": "Explorer and candidate-site comparisons are corroboration signals only; canonical identity remains unchanged.",
+    })
     return result
 
 
