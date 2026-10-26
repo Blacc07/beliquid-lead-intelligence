@@ -1,7 +1,11 @@
 """Tests for conservative, multi-source automated criterion assessment."""
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from beliquid.automated_criterion_assessment import assess_criterion_reviews
+from beliquid.criterion_reviews import load_criterion_reviews
 
 
 CRITERIA = {
@@ -48,6 +52,16 @@ class AutomatedCriterionAssessmentTests(unittest.TestCase):
         self.assertEqual(record["score_status"], "withheld_insufficient_evidence")
         self.assertEqual(result["criterion_weights"]["service_fit_and_demonstrated_need"], 25)
         self.assertFalse(result["outreach_enabled"])
+
+    def test_generated_review_payload_passes_existing_review_schema(self):
+        trigger = {"records": [{"chain": "base", "contract_address": "0xabc123456789abcdef",
+                                "trigger_candidates": [self.candidate1, self.candidate2]}]}
+        result = assess_criterion_reviews(self.prospect, trigger, CRITERIA, STAMP2)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "automated-reviews.json"
+            path.write_text(json.dumps(result["criterion_reviews"]), encoding="utf-8")
+            loaded = load_criterion_reviews(path, CRITERIA)
+        self.assertEqual(loaded["base:0xabc123456789abcdef"]["buying_trigger_and_timing"]["status"], "confirmed")
 
     def test_single_source_does_not_confirm_criterion(self):
         trigger = {"records": [{"chain": "base", "contract_address": "0xabc123456789abcdef",
