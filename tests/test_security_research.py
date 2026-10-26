@@ -2,7 +2,7 @@
 import unittest
 from unittest.mock import patch
 
-from beliquid.security_research import collect_security, research_honeypot_is, research_security
+from beliquid.security_research import collect_security, research_goplus_solana, research_honeypot_is, research_security
 
 
 class SecurityResearchTests(unittest.TestCase):
@@ -91,6 +91,21 @@ class SecurityResearchTests(unittest.TestCase):
         self.assertEqual(result["risk_status"], "concern")
         self.assertTrue(result["provider_url"].startswith("https://api.rugcheck.xyz/v1/tokens/"))
         self.assertEqual(result["criterion_evidence_candidate"]["criterion"], "security_and_reputational_integrity")
+
+    def test_goplus_solana_report_is_recorded_as_independent_source(self):
+        payload = {"code": 1, "result": {"So111": {"mint_authority": "authority", "freeze_authority": None}}}
+        result = research_goplus_solana({"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"},
+                                        "2026-10-21T12:00:00Z", lambda url: payload)
+        self.assertEqual(result["fetch_status"], "success")
+        self.assertEqual(result["provider"], "GoPlus Solana Token Security API")
+        self.assertEqual(result["risk_status"], "no_high_risk_flag_detected_by_provider")
+        self.assertTrue(any(item["field"] == "mint_authority" for item in result["findings"]))
+
+    def test_goplus_solana_missing_report_stays_unknown(self):
+        result = research_goplus_solana({"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111"},
+                                        "2026-10-21T12:00:00Z", lambda url: {"code": 1, "result": {}})
+        self.assertEqual(result["fetch_status"], "no_report")
+        self.assertEqual(result["risk_status"], "unknown")
 
     def test_solana_clean_report_is_not_global_clearance(self):
         payload = {"mint": "So111", "riskLevel": "Good", "rugged": False, "risks": [], "score_normalised": 1}
