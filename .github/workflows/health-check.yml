@@ -87,6 +87,16 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.trigger_research --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --output artifacts/trigger-research.json --previous .cache/research-state/trigger-research.json --cache-ttl-hours 24
 
+      - name: Assess criteria from corroborated dated news evidence
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.automated_criterion_assessment --input artifacts/prospect-review.json --triggers artifacts/trigger-research.json --criteria config/qualification_criteria.json --output artifacts/automated-criterion-assessment.json --reviews-output artifacts/automated-criterion-reviews.json
+
+      - name: Rebuild final prospect exports with deterministic assessments
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.rebuild_review_export --input artifacts/prospect-review.json --summary artifacts/pipeline-summary.json --output-dir artifacts --criterion-reviews artifacts/automated-criterion-reviews.json
+
       - name: Aggregate evidence candidates against the six qualification criteria
         env:
           PYTHONPATH: src
