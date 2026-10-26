@@ -72,6 +72,7 @@ def build_task_ledger(
     completed_at: str | None = None,
     trigger_research: dict[str, Any] | None = None,
     previous_payload: dict[str, Any] | None = None,
+    identity_crosscheck: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     records = prospect_payload.get("records")
     if not isinstance(records, list) or any(not isinstance(record, dict) for record in records):
@@ -79,6 +80,7 @@ def build_task_ledger(
     public_by_key = _source_record_map(public_research, "automated public research")
     security_by_key = _source_record_map(security_research, "automated security research")
     trigger_by_key = _source_record_map(trigger_research, "automated trigger research")
+    identity_by_key = _source_record_map(identity_crosscheck, "identity cross-check") if identity_crosscheck is not None else {}
     now = completed_at or datetime.now(timezone.utc).isoformat()
     previous_reviews = previous_payload.get("reviews", {}) if isinstance(previous_payload, dict) else {}
     previous_history = previous_payload.get("historical_reviews", {}) if isinstance(previous_payload, dict) else {}
@@ -111,6 +113,9 @@ def build_task_ledger(
         security = security_by_key.get(key, {})
         if security.get("fetch_status") in {"success", "no_report"} and security.get("provider_url"):
             identity_evidence.append((security["provider_url"], security.get("observed_at", now)))
+        crosscheck = identity_by_key.get(key, {})
+        if crosscheck.get("fetch_status") == "success" and crosscheck.get("chain_explorer_url"):
+            identity_evidence.append((crosscheck["chain_explorer_url"], crosscheck.get("observed_at", now)))
         entry = _completion("verify_identity_and_risk", record, identity_evidence, "inconclusive", now)
         if entry:
             tasks["verify_identity_and_risk"] = entry
@@ -184,15 +189,16 @@ def build_task_ledger(
     }
 
 
-def write_task_ledger(prospect_path: Path, public_path: Path, security_path: Path, output_path: Path, trigger_path: Path | None = None, previous_path: Path | None = None) -> dict[str, Any]:
+def write_task_ledger(prospect_path: Path, public_path: Path, security_path: Path, output_path: Path, trigger_path: Path | None = None, previous_path: Path | None = None, identity_path: Path | None = None) -> dict[str, Any]:
     prospect = json.loads(prospect_path.read_text(encoding="utf-8"))
     public = json.loads(public_path.read_text(encoding="utf-8")) if public_path.is_file() else None
     security = json.loads(security_path.read_text(encoding="utf-8")) if security_path.is_file() else None
     trigger = json.loads(trigger_path.read_text(encoding="utf-8")) if trigger_path and trigger_path.is_file() else None
     previous = json.loads(previous_path.read_text(encoding="utf-8")) if previous_path and previous_path.is_file() else None
+    identity = json.loads(identity_path.read_text(encoding="utf-8")) if identity_path and identity_path.is_file() else None
     if not isinstance(prospect, dict):
         raise ValueError("prospect-review input must be a JSON object")
-    result = build_task_ledger(prospect, public, security, trigger_research=trigger, previous_payload=previous)
+    result = build_task_ledger(prospect, public, security, trigger_research=trigger, previous_payload=previous, identity_crosscheck=identity)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return {key: result[key] for key in ("records_with_task_completions", "task_completion_counts", "outreach_enabled")}
@@ -206,9 +212,10 @@ def main() -> int:
     parser.add_argument("--trigger-research", type=Path, default=Path("artifacts/trigger-research.json"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/research-task-ledger.json"))
     parser.add_argument("--previous", type=Path, default=Path(".cache/research-state/research-task-ledger.json"))
+    parser.add_argument("--identity-crosscheck", type=Path, default=Path("artifacts/identity-crosscheck.json"))
     args = parser.parse_args()
     try:
-        print(json.dumps(write_task_ledger(args.input, args.public_research, args.security_research, args.output, args.trigger_research, args.previous), indent=2))
+        print(json.dumps(write_task_ledger(args.input, args.public_research, args.security_research, args.output, args.trigger_research, args.previous, args.identity_crosscheck), indent=2))
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(json.dumps({"status": "failure", "error": str(exc)}, indent=2))
         return 1
