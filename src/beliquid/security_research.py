@@ -11,6 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import json
 import logging
+import os
 from pathlib import Path
 import time
 from typing import Any, Callable
@@ -21,6 +22,7 @@ from urllib.request import Request, urlopen
 LOGGER = logging.getLogger(__name__)
 API_ROOT = "https://api.gopluslabs.io/api/v1/token_security"
 RUGCHECK_API_ROOT = "https://api.rugcheck.xyz/v1/tokens"
+GOPLUS_SOLANA_API_ROOT = "https://api.gopluslabs.io/api/v1/solana/token_security"
 HONEYPOT_API_ROOT = "https://api.honeypot.is/v2/IsHoneypot"
 MAX_WORKERS = 6
 SECURITY_CACHE_VERSION = 3
@@ -57,7 +59,11 @@ def _truthy_flag(value: Any) -> bool:
 
 
 def _default_request(url: str, timeout: float = TIMEOUT_SECONDS) -> dict[str, Any]:
-    request = Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    token = os.environ.get("GOPLUS_ACCESS_TOKEN", "").strip()
+    if token and "api.gopluslabs.io" in url:
+        headers["Authorization"] = f"Bearer {token}"
+    request = Request(url, headers=headers)
     with urlopen(request, timeout=timeout) as response:
         body = response.read(MAX_RESPONSE_BYTES + 1)
     if len(body) > MAX_RESPONSE_BYTES:
@@ -110,6 +116,48 @@ def fetch_token_report(url: str, requester: Callable[[str], dict[str, Any]] = _d
     if last_error:
         raise last_error
     raise RuntimeError("RugCheck request ended without a response")
+
+
+def research_goplus_solana(record: dict[str, Any], observed_at: str, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
+    """Optional independent Solana security source; requires GOPLUS_ACCESS_TOKEN."""
+    address = str(record.get("contract_address") or "").strip()
+    url = f"{GOPLUS_SOLANA_API_ROOT}?{urlencode({'contract_addresses': address})}" if address else None
+    result: dict[str, Any] = {"provider": "GoPlus Solana Token Security API", "provider_url": url,
+        "observed_at": observed_at, "fetch_status": "not_attempted", "provider_report_status": "unknown",
+        "risk_status": "unknown", "findings": []}
+    if not address:
+        result.update(fetch_status="missing_contract_address", research_note="No Solana mint supplied; GoPlus result remains unknown.")
+        return result
+    if requester is _default_request and not os.environ.get("GOPLUS_ACCESS_TOKEN", "").strip():
+        result.update(fetch_status="credentials_missing", research_note="GOPLUS_ACCESS_TOKEN is not configured; the optional independent GoPlus Solana source was not called.")
+        return result
+    try:
+        payload = fetch_token_report(url, requester)
+    except HTTPError as exc:
+        result.update(fetch_status="fetch_failed", research_note=f"GoPlus Solana returned HTTP {exc.code}; risk remains unknown.")
+        return result
+    except (URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
+        result.update(fetch_status="fetch_failed", research_note=f"GoPlus Solana request failed ({type(exc).__name__}); risk remains unknown.")
+        return result
+    if payload.get("code") not in (None, 1, "1", 200, "200"):
+        result.update(fetch_status="provider_error", research_note="GoPlus Solana returned an API error; risk remains unknown.")
+        return result
+    data = payload.get("result")
+    report = (data.get(address) or data.get(address.casefold()) or data.get(address.upper())) if isinstance(data, dict) else None
+    if not isinstance(report, dict) or not report:
+        result.update(fetch_status="no_report", provider_report_status="not_found", research_note="GoPlus Solana returned no matching report; this is not evidence of safety.")
+        return result
+    findings = []
+    for field in ("mint_authority", "freeze_authority", "close_authority", "metadata_mutable", "balance_mutable", "transfer_fee", "transfer_hook"):
+        value = report.get(field)
+        if value not in (None, "", False, "0", 0, "null"):
+            findings.append({"field": field, "value": str(value)[:300], "severity": "review",
+                             "description": "GoPlus Solana reports a token authority or mutable-token capability requiring context"})
+    result.update({"fetch_status": "success", "provider_report_status": "found",
+        "risk_status": "no_high_risk_flag_detected_by_provider",
+        "findings": findings, "report_fields_present": sorted(str(key) for key in report),
+        "research_note": "GoPlus Solana observations are source-scoped; authority and mutable-token fields require context and do not independently prove malicious behavior."})
+    return result
 
 
 def research_solana_security(record: dict[str, Any], observed_at: str, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
@@ -254,7 +302,24 @@ def research_security(record: dict[str, Any], observed_at: str, requester: Calla
         "outreach_enabled": False,
     }
     if chain in {"solana", "sol"}:
-        return research_solana_security(record, observed_at, requester)
+        primary = research_solana_security(record, observed_at, requester)
+        secondary = research_goplus_solana(record, observed_at, requester)
+        primary["independent_sources"] = [
+            {"provider": primary.get("provider"), "provider_url": primary.get("provider_url"),
+             "fetch_status": primary.get("fetch_status"), "risk_status": primary.get("risk_status"),
+             "findings": primary.get("findings", []), "observed_at": primary.get("observed_at")},
+            secondary,
+        ]
+        primary["independent_provider_count"] = sum(item.get("fetch_status") == "success" for item in primary["independent_sources"])
+        if secondary.get("fetch_status") == "success":
+            primary["independent_sources"][1]["risk_status"] = secondary.get("risk_status")
+        if secondary.get("risk_status") == "concern":
+            primary["risk_status"] = "concern"
+            primary["findings"] = list(primary.get("findings", [])) + [
+                {**item, "provider": secondary.get("provider")} for item in secondary.get("findings", []) if item.get("severity") == "high"
+            ]
+        primary["independent_coverage_note"] = "RugCheck is the default Solana source; GoPlus Solana coverage is attempted only when GOPLUS_ACCESS_TOKEN is configured. Missing credentials or reports remain unknown."
+        return primary
     chain_id = CHAIN_IDS.get(chain)
     if not chain_id:
         result.update(fetch_status="unsupported_chain", research_note="No configured GoPlus chain mapping; risk remains unknown.")
@@ -373,7 +438,7 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
         "schema_version": 1,
         "source": "GoPlus plus Honeypot.is simulation (configured EVM chains); RugCheck (Solana)",
         "cache_version": SECURITY_CACHE_VERSION,
-        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "evm_secondary_provider": "Honeypot.is", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
+        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "solana_secondary_provider": "GoPlus Solana (GOPLUS_ACCESS_TOKEN optional)", "evm_secondary_provider": "Honeypot.is", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
         "records_reused_from_cache": reused,
         "historical_concerns_retained": historical_retained,
         "records_exported": len(results),
