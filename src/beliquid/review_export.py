@@ -161,6 +161,20 @@ def write_review_exports(
         "minimum_evidence_coverage_percent": config["minimum_evidence_coverage_percent"],
     }
     summary["criterion_reviews"] = criterion_review_summary
+    qualification_summary = summary.setdefault("qualification", {})
+    qualification_summary.update({
+        "prospects_evaluated": len(rows),
+        "scores_issued": sum(row["qualification"]["score_percent"] is not None for row in rows),
+        "scores_withheld_insufficient_evidence": sum(row["qualification"]["score_status"] == "insufficient_evidence" for row in rows),
+        "manual_evidence_review_required": sum(
+            any(item.get("status") == "unknown" for item in row["qualification"].get("criteria", []))
+            for row in rows
+        ),
+        "criteria_weights_total": sum(item["weight"] for item in config["criteria"]),
+        "minimum_evidence_coverage_percent": config["minimum_evidence_coverage_percent"],
+        "outreach_enabled": False,
+        "note": "Automated criterion assessments use only explicit source-linked rules. Unknown criteria are excluded from assessed weight; scores remain withheld below the configured evidence-coverage threshold. Outreach is disabled.",
+    })
 
     json_path = destination / "prospect-review.json"
     csv_path = destination / "prospect-review.csv"
