@@ -138,21 +138,36 @@ def build_criterion_evidence(
             if candidate.get("status") == "candidate_only" and candidate.get("published_at") and item["source_url"] and item["observed_at"]:
                 evidence["buying_trigger_and_timing"].append(item)
 
+        qualification = prospect.get("qualification") if isinstance(prospect.get("qualification"), dict) else {}
+        assessed_by_key = {
+            item.get("criterion"): item for item in qualification.get("criteria", [])
+            if isinstance(item, dict) and item.get("criterion")
+        }
         criterion_rows = []
         for criterion_key in [item["key"] for item in criteria]:
             definition = criterion_defs[criterion_key]
+            assessed = assessed_by_key.get(criterion_key, {})
+            status = assessed.get("status", "unknown")
+            urls = assessed.get("evidence_urls", [])
+            timestamps = assessed.get("evidence_timestamps", [])
+            assessment_evidence = [
+                {"source_url": url, "observed_at": timestamps[index]}
+                for index, url in enumerate(urls)
+                if isinstance(url, str) and index < len(timestamps) and isinstance(timestamps[index], str)
+            ]
             criterion_rows.append({
                 "key": criterion_key,
                 "label": definition.get("label", criterion_key),
                 "weight": definition.get("weight"),
-                "assessment_status": "unknown",
+                "assessment_status": status,
                 "candidate_evidence_status": "candidate_only" if evidence[criterion_key] else "unknown",
                 "candidate_evidence_count": len(evidence[criterion_key]),
                 "source_checks_count": len(checks[criterion_key]),
-                "evidence_coverage_eligible": False,
+                "evidence_coverage_eligible": status in {"confirmed", "not_present"} and len(urls) > 0 and len(urls) == len(timestamps),
                 "evidence": evidence[criterion_key],
+                "assessed_evidence": assessment_evidence,
                 "source_checks": checks[criterion_key],
-                "note": "Unknown is preserved until evidence is assessed against the criterion definition; absence of a candidate is not evidence of absence.",
+                "note": assessed.get("reviewer_note") or assessed.get("note") or ("Unknown is preserved; absence of a candidate is not evidence of absence." if status == "unknown" else "Status is sourced from the validated criterion assessment used by the qualification pipeline."),
             })
         output_records.append({
             "project_name": prospect.get("project_name", ""),
@@ -162,8 +177,8 @@ def build_criterion_evidence(
             "identity_status": (prospect.get("identity_risk") or {}).get("identity_status", "unknown"),
             "risk_status": (prospect.get("identity_risk") or {}).get("risk_status", "unknown"),
             "criteria": criterion_rows,
-            "qualification_score": None,
-            "score_status": "withheld",
+            "qualification_score": qualification.get("score_percent"),
+            "score_status": qualification.get("score_status", "insufficient_evidence"),
             "outreach_enabled": False,
         })
 
@@ -181,11 +196,11 @@ def build_criterion_evidence(
             for item in criteria
         },
         "records_with_any_candidate_evidence": sum(any(c["candidate_evidence_count"] for c in record["criteria"]) for record in output_records),
-        "records_with_scores": 0,
+        "records_with_scores": sum(record.get("qualification_score") is not None for record in output_records),
         "canonical_criterion_reviews_changed": False,
         "qualification_scores_changed": False,
         "outreach_enabled": False,
-        "note": "Candidate evidence is mapped to the existing six criteria, but no criterion is confirmed or ruled out and no score is calculated by this report.",
+        "note": "Candidate evidence is mapped to the existing six criteria; assessment statuses and scores reflect the validated qualification export. Candidate evidence alone never confirms or rules out a criterion.",
         "records": output_records,
     }
 
