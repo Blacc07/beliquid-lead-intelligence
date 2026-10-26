@@ -69,7 +69,9 @@ def validate_batch(artifacts_dir: Path, repo_root: Path = Path(".")) -> dict[str
             raise ValueError(f"required batch artifact missing: {path}")
 
     config = load_criteria_config(repo_root / REVIEW_FILES["qualification_criteria"])
-    criterion_reviews = load_criterion_reviews(repo_root / REVIEW_FILES["criterion_reviews"], config)
+    automated_criterion_reviews = artifacts_dir / "automated-criterion-reviews.json"
+    criterion_reviews_path = automated_criterion_reviews if automated_criterion_reviews.is_file() else repo_root / REVIEW_FILES["criterion_reviews"]
+    criterion_reviews = load_criterion_reviews(criterion_reviews_path, config)
     identity_reviews = load_identity_risk_reviews(repo_root / REVIEW_FILES["identity_risk_reviews"])
     trigger_reviews = load_buying_trigger_reviews(repo_root / REVIEW_FILES["buying_trigger_reviews"])
     generated_ledger = artifacts_dir / "research-task-ledger.json"
@@ -242,7 +244,7 @@ def write_audit_manifest(artifacts_dir: Path, validation: dict[str, Any], repo_r
             raise ValueError(f"review input/config missing for audit manifest: {path}")
         input_hashes[str(relative)] = _sha256(path)
     output_hashes = {}
-    for name in ("prospect-review.csv", "prospect-review.json", "pipeline-summary.json", "research-queue.csv", "research-queue.json", "automated-research.json", "security-research.json", "trigger-research.json", "criterion-evidence.json", "research-task-ledger.json"):
+    for name in ("prospect-review.csv", "prospect-review.json", "pipeline-summary.json", "research-queue.csv", "research-queue.json", "automated-research.json", "security-research.json", "trigger-research.json", "criterion-evidence.json", "research-task-ledger.json", "automated-criterion-assessment.json", "automated-criterion-reviews.json"):
         path = artifacts_dir / name
         output_hashes[name] = _sha256(path)
     manifest = {
