@@ -63,9 +63,15 @@ jobs:
             const title = '[automation-state] BeLiquid research task ledger';
             const start = '<!-- beliquid-task-ledger:start -->';
             const end = '<!-- beliquid-task-ledger:end -->';
-            const response = await github.rest.issues.listForRepo({
-              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
-            });
+            let response;
+            try {
+              response = await github.rest.issues.listForRepo({
+                owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
+              });
+            } catch (error) {
+              core.warning(`Could not read durable ledger issue; retaining cache state: ${error.message}`);
+              response = { data: [] };
+            }
             const issue = response.data.find(item => !item.pull_request && item.title === title);
             if (issue) {
               const body = issue.body || '';
