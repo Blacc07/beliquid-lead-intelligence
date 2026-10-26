@@ -39,6 +39,8 @@ jobs:
     permissions:
       contents: read
       issues: write
+    outputs:
+      durable_restore_status: ${{ steps.restore-ledger.outputs.restore_status }}
 
     steps:
       - name: Check out repository
@@ -67,6 +69,7 @@ jobs:
             const title = '[automation-state] BeLiquid research task ledger';
             const start = '<!-- beliquid-task-ledger:start -->';
             const end = '<!-- beliquid-task-ledger:end -->';
+            let restoreStatus = 'missing';
             let response;
             try {
               response = await github.rest.issues.listForRepo({
@@ -87,6 +90,7 @@ jobs:
                   if (ledger && typeof ledger === 'object' && ledger.schema_version === 1 && ledger.reviews && typeof ledger.reviews === 'object') {
                     fs.mkdirSync('.cache/research-state', { recursive: true });
                     fs.writeFileSync(path, JSON.stringify(ledger, null, 2) + '\n');
+                    restoreStatus = 'restored';
                     core.info(`Restored durable research ledger from issue #${issue.number}; active=${Object.keys(ledger.reviews).length}, historical=${Object.keys(ledger.historical_reviews || {}).length}`);
                   } else {
                     core.warning('Durable issue ledger had an unexpected schema; retaining cache state.');
@@ -102,8 +106,9 @@ jobs:
             } else {
               core.info('No durable ledger issue exists yet; using the branch cache until the first trusted-run persistence step.');
             }
-            const ledgerIssueFound = Boolean(response && response.data.some(item => !item.pull_request && item.title === title));
-            core.setOutput('restore_status', response.readFailed ? 'read_failed' : (ledgerIssueFound ? 'issue_found' : 'missing'));
+            if (response.readFailed) restoreStatus = 'read_failed';
+            else if (restoreStatus === 'missing' && response.data.some(item => !item.pull_request && item.title === title)) restoreStatus = 'invalid';
+            core.setOutput('restore_status', restoreStatus);
 
       - name: Verify Python version
         run: python --version
@@ -353,7 +358,7 @@ jobs:
           JOB_STATUS: ${{ job.status }}
           RUN_NUMBER: ${{ github.run_number }}
           EVENT_NAME: ${{ github.event_name }}
-          DURABLE_RESTORE_STATUS: ${{ steps.restore-ledger.outputs.restore_status }}
+          DURABLE_RESTORE_STATUS: ${{ needs.health-check.outputs.durable_restore_status }}
         run: |
           {
             echo "## BeLiquid Pipeline Health Check"
