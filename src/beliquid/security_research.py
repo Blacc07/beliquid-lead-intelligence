@@ -21,6 +21,7 @@ from urllib.request import Request, urlopen
 LOGGER = logging.getLogger(__name__)
 API_ROOT = "https://api.gopluslabs.io/api/v1/token_security"
 RUGCHECK_API_ROOT = "https://api.rugcheck.xyz/v1/tokens"
+HONEYPOT_API_ROOT = "https://api.honeypot.is/v2/IsHoneypot"
 MAX_WORKERS = 6
 SECURITY_CACHE_VERSION = 2
 USER_AGENT = "BeLiquid-Lead-Intelligence/0.1 (+https://github.com/Blacc07/beliquid-lead-intelligence)"
@@ -183,6 +184,58 @@ def research_solana_security(record: dict[str, Any], observed_at: str, requester
     })
     return result
 
+
+def research_honeypot_is(record: dict[str, Any], observed_at: str, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
+    """Fetch an independent EVM token simulation; unavailable data is never clean."""
+    chain = str(record.get("chain") or "").strip().casefold()
+    chain_id = CHAIN_IDS.get(chain)
+    address = str(record.get("contract_address") or "").strip()
+    result: dict[str, Any] = {"provider": "Honeypot.is token simulation", "provider_url": None,
+        "observed_at": observed_at, "fetch_status": "not_attempted", "provider_report_status": "unknown",
+        "risk_status": "unknown", "findings": []}
+    if not chain_id:
+        result.update(fetch_status="unsupported_chain", research_note="Honeypot.is chain mapping unavailable; independent source remains unknown.")
+        return result
+    if not address:
+        result.update(fetch_status="missing_contract_address", research_note="No contract address supplied; independent source remains unknown.")
+        return result
+    url = f"{HONEYPOT_API_ROOT}?{urlencode({'address': address, 'chainID': chain_id})}"
+    result["provider_url"] = url
+    try:
+        payload = fetch_token_report(url, requester)
+    except HTTPError as exc:
+        result.update(fetch_status="no_report" if exc.code == 404 else "fetch_failed",
+                      provider_report_status="not_found" if exc.code == 404 else "unknown",
+                      research_note=f"Honeypot.is request returned HTTP {exc.code}; this is not evidence of safety.")
+        return result
+    except (URLError, TimeoutError, OSError, ValueError, json.JSONDecodeError) as exc:
+        result.update(fetch_status="fetch_failed", research_note=f"Honeypot.is request failed ({type(exc).__name__}); independent risk remains unknown.")
+        return result
+    honeypot = payload.get("honeypotResult") if isinstance(payload.get("honeypotResult"), dict) else {}
+    simulation = payload.get("simulationResult") if isinstance(payload.get("simulationResult"), dict) else {}
+    if not honeypot and not simulation and not any(k in payload for k in ("contractCode", "token", "summary")):
+        result.update(fetch_status="no_report", provider_report_status="not_found", research_note="Honeypot.is returned no recognizable simulation report; independent risk remains unknown.")
+        return result
+    findings = []
+    if honeypot.get("isHoneypot") is True:
+        findings.append({"field": "isHoneypot", "value": "true", "severity": "high", "description": "Honeypot.is simulation reports honeypot behavior"})
+    for field in ("buyTax", "sellTax"):
+        value = simulation.get(field)
+        try:
+            numeric = float(value) if value is not None else None
+        except (TypeError, ValueError):
+            numeric = None
+        if numeric is not None and numeric >= 20:
+            findings.append({"field": field, "value": str(value), "severity": "review", "description": f"Honeypot.is simulation reports {field} at or above 20%; execution conditions matter"})
+    result.update({"fetch_status": "success", "provider_report_status": "found",
+        "risk_status": "concern" if any(item["severity"] == "high" for item in findings) else "no_high_risk_flag_detected_by_provider",
+        "findings": findings,
+        "simulation_summary": {key: simulation.get(key) for key in ("buyTax", "sellTax", "buyGas", "sellGas", "maxBuy", "maxSell") if key in simulation},
+        "contract_code_summary": {key: payload.get("contractCode", {}).get(key) for key in ("openSource", "isProxy", "hasProxyCalls") if isinstance(payload.get("contractCode"), dict) and key in payload.get("contractCode", {})},
+        "research_note": "Simulation results depend on provider support, chain state, and simulation conditions; this source does not establish global safety."})
+    return result
+
+
 def research_security(record: dict[str, Any], observed_at: str, requester: Callable[[str], dict[str, Any]] = _default_request) -> dict[str, Any]:
     chain = str(record.get("chain") or "").strip().casefold()
     address = str(record.get("contract_address") or "").strip()
@@ -237,18 +290,28 @@ def research_security(record: dict[str, Any], observed_at: str, requester: Calla
     for field in ("is_mintable", "is_proxy", "is_blacklisted", "transfer_pausable", "trading_cooldown", "cannot_buy"):
         if field in report and _truthy_flag(report[field]):
             findings.append({"field": field, "value": str(report[field]), "severity": "review", "description": "Provider-reported contract capability requiring context"})
+    secondary = research_honeypot_is(record, observed_at, requester)
+    secondary_findings = [{**item, "provider": "Honeypot.is token simulation"} for item in secondary.get("findings", [])]
+    all_findings = findings + secondary_findings
+    any_concern = any(item.get("severity") == "high" for item in all_findings)
     result.update({
         "fetch_status": "success",
         "provider_report_status": "found",
-        "risk_status": "concern" if any(item["severity"] == "high" for item in findings) else "no_high_risk_flag_detected_by_provider",
+        "risk_status": "concern" if any_concern else "no_high_risk_flag_detected_by_provider",
         "findings": findings,
-        "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "candidate_only", "source_scoped_risk_status": "concern" if any(item["severity"] == "high" for item in findings) else "no_high_risk_flag_detected_by_provider", "evidence_url": url, "observed_at": observed_at, "note": "A single provider report is not a complete security or reputational assessment."},
+        "independent_sources": [
+            {"provider": "GoPlus Token Security API", "provider_url": url, "fetch_status": "success",
+             "risk_status": "concern" if any(item["severity"] == "high" for item in findings) else "no_high_risk_flag_detected_by_provider",
+             "findings": findings, "observed_at": observed_at},
+            secondary,
+        ],
+        "independent_provider_count": 2 if secondary.get("fetch_status") == "success" else 1,
+        "criterion_evidence_candidate": {"criterion": "security_and_reputational_integrity", "status": "candidate_only", "source_scoped_risk_status": "concern" if any_concern else "no_high_risk_flag_detected_by_provider", "evidence_url": url, "observed_at": observed_at, "note": "Provider-specific findings are retained separately; unavailable secondary results do not imply safety."},
         "report_fields_present": sorted(str(key) for key in report.keys()),
         "research_note": (
-            "GoPlus reported one or more high-severity contract flags. Treat as a source-backed concern requiring a hold; "
-            "the finding does not by itself prove malicious intent."
-            if any(item["severity"] == "high" for item in findings)
-            else "No configured high-severity flags were detected in this GoPlus report. This is not a global risk clearance; reputational and other security sources remain separate."
+            "At least one provider reported a high-severity contract concern. Route conservatively; this is source-backed evidence, not conclusive proof of malicious intent."
+            if any_concern
+            else "No configured high-severity flag was detected in the returned reports. Provider coverage may be incomplete; this is not global risk clearance."
         ),
     })
     return result
@@ -308,9 +371,9 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
         results.append(current)
     return {
         "schema_version": 1,
-        "source": "GoPlus (configured EVM chains) and RugCheck (Solana)",
+        "source": "GoPlus plus Honeypot.is simulation (configured EVM chains); RugCheck (Solana)",
         "cache_version": SECURITY_CACHE_VERSION,
-        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
+        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "evm_secondary_provider": "Honeypot.is", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
         "records_reused_from_cache": reused,
         "historical_concerns_retained": historical_retained,
         "records_exported": len(results),
