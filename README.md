@@ -41,6 +41,22 @@ The discovery command makes one live HTTP request. The enrichment command fetche
 
 The workflow is scheduled daily at 08:00 UTC. Scheduled jobs can be delayed. Usage limits depend on the repository's plan, runner type, and GitHub's current policies; public visibility does not guarantee unlimited use of every runner type.
 
+## Telegram lead notifications
+
+The workflow can send a private Telegram digest after successful non-PR runs. It sends up to 10 generated research candidates with chain, candidate contract/site, research-priority heuristic, current route, and whether qualification score is withheld; it does not contact prospects. Candidates are not represented as verified identities or cleared-risk leads.
+
+To enable it:
+
+1. Create a bot with Telegram's official [BotFather](https://t.me/BotFather) and copy the bot token. Keep the token private.
+2. Open the bot's chat in Telegram and press **Start** so the bot can message you.
+3. Obtain your numeric Telegram chat ID from a trusted bot/API method after starting the bot.
+4. In the GitHub repository, open **Settings → Secrets and variables → Actions → New repository secret** and add:
+   - `TELEGRAM_BOT_TOKEN` — the bot token from BotFather.
+   - `TELEGRAM_CHAT_ID` — your private chat ID.
+5. Run the workflow manually from **Actions**, or wait for the next scheduled run. Pull-request runs do not send Telegram messages. If either secret is missing, the workflow reports that delivery was skipped; an API delivery error is reported as a failed step.
+
+Never commit bot credentials or paste them into source files. Telegram delivery is for your own lead-review digest only; automated prospect outreach remains disabled.
+
 ## Proposed BeLiquid qualification model
 
 The configurable pilot baseline totals 100 points:
