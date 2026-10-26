@@ -133,6 +133,7 @@ class TaskLedgerTests(unittest.TestCase):
         }]}
         first = build_task_ledger({"records": [row]}, public, {"records": []}, STAMP)
         changed_row = prospect("changed", market_value=999.0)
+        changed_row["evidence"] = []
         second = build_task_ledger(
             {"records": [changed_row]}, {"records": []}, {"records": []},
             "2026-10-22T12:00:00Z", previous_payload=first,
