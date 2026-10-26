@@ -1,5 +1,6 @@
 """Offline tests for dated RSS/Atom buying-trigger candidates."""
 import unittest
+from unittest.mock import patch
 from beliquid.trigger_research import collect_trigger_research, research_feed, _parse_timestamp
 
 
@@ -37,11 +38,31 @@ class TriggerResearchTests(unittest.TestCase):
         self.assertEqual(len(result["trigger_candidates"]), 0)
         self.assertEqual(result["undated_matches"], 1)
 
-    def test_failed_feed_is_explicit(self):
-        result = research_feed({"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha"},
-                               "https://alpha.example/feed.xml", STAMP, lambda url: (_ for _ in ()).throw(TimeoutError()))
+    def test_failed_feed_is_explicit_after_bounded_retries(self):
+        calls = []
+        def fail(url):
+            calls.append(url)
+            raise TimeoutError("temporary")
+        with patch("beliquid.automated_research.time.sleep"):
+            result = research_feed({"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha"},
+                                   "https://alpha.example/feed.xml", STAMP, fail)
         self.assertEqual(result["fetch_status"], "fetch_failed")
         self.assertEqual(result["trigger_candidates"], [])
+        self.assertEqual(len(calls), 3)
+
+    def test_feed_transient_failure_retries_then_succeeds(self):
+        calls = []
+        feed = {"feed_url": "https://alpha.example/feed.xml", "entries": []}
+        def flaky(url):
+            calls.append(url)
+            if len(calls) == 1:
+                raise TimeoutError("temporary")
+            return feed
+        with patch("beliquid.automated_research.time.sleep"):
+            result = research_feed({"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha"},
+                                   "https://alpha.example/feed.xml", STAMP, flaky)
+        self.assertEqual(result["fetch_status"], "success")
+        self.assertEqual(len(calls), 2)
 
     def test_recent_successful_feed_is_reused(self):
         prospect = {"records": [{"project_name": "Alpha", "chain": "ethereum", "contract_address": "0xalpha", "token_symbol": "ALPHA"}]}
