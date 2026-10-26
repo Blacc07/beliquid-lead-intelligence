@@ -182,6 +182,10 @@ class ValidateReviewBatchTests(unittest.TestCase):
         finally:
             os.environ.clear()
             os.environ.update(old)
+        (self.artifacts / "automated-criterion-assessment.json").write_text(json.dumps({"records": []}), encoding="utf-8")
+        (self.artifacts / "automated-criterion-reviews.json").write_text(json.dumps({"reviews": {}}), encoding="utf-8")
+        result = validate_batch(self.artifacts, self.root)
+        path = write_audit_manifest(self.artifacts, result, self.root)
         manifest = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["workflow"]["run_id"], "test-run-123")
         self.assertEqual(manifest["workflow"]["commit_sha"], "test-sha")
@@ -192,6 +196,8 @@ class ValidateReviewBatchTests(unittest.TestCase):
         self.assertIn("trigger-research.json", manifest["export_sha256"])
         self.assertIn("criterion-evidence.json", manifest["export_sha256"])
         self.assertIn("research-task-ledger.json", manifest["export_sha256"])
+        self.assertIn("automated-criterion-assessment.json", manifest["export_sha256"])
+        self.assertIn("automated-criterion-reviews.json", manifest["export_sha256"])
         self.assertFalse(manifest["validation"]["outreach_enabled"])
 
 
