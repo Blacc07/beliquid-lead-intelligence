@@ -52,6 +52,15 @@ class IdentityCrosscheckTests(unittest.TestCase):
         self.assertEqual(failed["fetch_status"], "fetch_failed")
         self.assertEqual(failed["identity_candidate_assessment"]["status"], "unresolved")
 
+    def test_missing_candidate_website_or_page_is_safe_and_unresolved(self):
+        prospect = {**self.prospect, "website_url_candidate": None}
+        public = {"candidate_website_url": None, "page": None, "source_candidates": []}
+        result = crosscheck_record(prospect, public, STAMP,
+            lambda url: {"final_url": url, "page_title": "Unknown token", "links": []})
+        self.assertEqual(result["fetch_status"], "success")
+        self.assertEqual(result["identity_candidate_assessment"]["status"], "unresolved")
+        self.assertFalse(result["canonical_identity_status_changed"])
+
     def test_batch_exports_one_result_per_prospect(self):
         result = collect_identity_crosschecks({"records": [self.prospect]},
             {"records": [{"chain": "base", "contract_address": self.prospect["contract_address"], **self.public}]},
