@@ -20,14 +20,21 @@ Configured high-severity GoPlus flags include reported honeypot behavior, inabil
 
 A high-severity provider finding creates an automated hold in the research queue. The canonical identity/risk review file and qualification score are not silently rewritten. A report with no configured high-severity flags is labeled `no_high_risk_flag_detected_by_provider`, not `clear`; no report is `unknown`, never safe. A provider flag is a source-backed concern that warrants conservative routing, not conclusive proof of malicious intent.
 
+
+## Deterministic criterion assessment
+
+The workflow now emits `automated-criterion-assessment.json` and `automated-criterion-reviews.json` before rebuilding the final prospect exports. At this stage, only positive assessments for a narrow set of dated public-event criteria can be emitted: two distinct allowlisted publishers (CoinDesk and Cointelegraph), publication timestamps within 72 hours, similar titles (Jaccard token similarity at least 0.4), and strong entity matching (exact contract address, or both project name and token symbol). Publisher domains are checked against the event URLs. This was added specifically to avoid generic-name false positives such as unrelated news being matched to a project called “Launching”.
+
+The deterministic rules can confirm buying-trigger timing, growth/strategic potential, or explicit service-need language only when the relevant event terms and the two-source corroboration rule are satisfied. They never emit `not_present`; single-source, undated, mismatched, unsupported, or absent evidence remains `unknown`. A confirmed criterion still contributes only its configured weight, and the existing 60% evidence threshold controls whether a numeric score is issued. The assessment does not verify official identity, clear canonical risk, change the six weights, or enable outreach. In practice, this deliberately narrow rule set may issue no scores until stronger corroborated evidence exists.
+
 ## Pipeline and task behavior
 
-- `automated-research.json`, `trigger-research.json`, and `security-research.json` are generated independently from the canonical prospect review export.
+- `automated-research.json`, `trigger-research.json`, and `security-research.json` are collected from the initial discovery export. The deterministic criterion assessor then produces a validated review input and rebuilds the final prospect CSV/JSON exports before queue generation.
 - The research queue consumes the security output and routes a reported high-severity finding to an automated hold before commercial research.
 - The queue does not convert source results or the identity candidate-match score into canonical identity verification or a clean risk review.
 - Qualification still uses the existing six criteria and configured 60% evidence-coverage threshold. Candidate keywords and security flags do not automatically confirm criteria or generate a score.
 - Task completion is not qualification or clearance. Outreach remains disabled.
-- The audit manifest records SHA-256 hashes of both research outputs. Hashes establish artifact integrity, not the truth of a source statement.
+- The audit manifest records SHA-256 hashes of the research outputs, deterministic criterion assessment and generated review input. Hashes establish artifact integrity, not the truth of a source statement.
 
 ## Remaining limitations
 
