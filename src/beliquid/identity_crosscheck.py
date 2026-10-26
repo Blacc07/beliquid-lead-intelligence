@@ -84,7 +84,8 @@ def crosscheck_record(prospect: dict[str, Any], public_record: dict[str, Any] | 
     project_name = str(prospect.get("project_name") or "").strip()
     symbol_match = _contains_token(metadata, symbol)
     name_match = bool(project_name and len(project_name) >= 4 and project_name.casefold() in metadata.casefold())
-    contract_on_candidate_site = bool((public_record or {}).get("page", {}).get("contract_address_mentioned"))
+    public_page = (public_record or {}).get("page") or {}
+    contract_on_candidate_site = bool(public_page.get("contract_address_mentioned"))
     candidate_domain = _host(candidate_url)
     final_explorer_url = page.get("final_url") or explorer_url
     explorer_domains = sorted({_host(urljoin(final_explorer_url, link.get("href", ""))) for link in page.get("links", [])
