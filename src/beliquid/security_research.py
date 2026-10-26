@@ -451,7 +451,7 @@ def collect_security(payload: dict[str, Any], observed_at: str | None = None, re
         "schema_version": 1,
         "source": "GoPlus plus Honeypot.is simulation (configured EVM chains); RugCheck (Solana)",
         "cache_version": SECURITY_CACHE_VERSION,
-        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "solana_secondary_provider": "GoPlus Solana (GOPLUS_ACCESS_TOKEN optional)", "evm_secondary_provider": "Honeypot.is", "api_key_required": False, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
+        "source_coverage": {"goplus_chain_names": sorted(CHAIN_IDS), "solana_provider": "RugCheck", "solana_secondary_provider": "GoPlus Solana (GOPLUS_ACCESS_TOKEN optional)", "evm_secondary_provider": "Honeypot.is", "api_key_required": "only for optional GoPlus Solana secondary", "optional_credentials": {"GOPLUS_ACCESS_TOKEN": "required to call GoPlus Solana; absent secret skips that source and preserves unknown"}, "attempts_per_request": MAX_ATTEMPTS, "timeout_seconds": TIMEOUT_SECONDS, "max_workers": MAX_WORKERS, "cache_ttl_hours": cache_ttl_hours},
         "records_reused_from_cache": reused,
         "historical_concerns_retained": historical_retained,
         "records_exported": len(results),
