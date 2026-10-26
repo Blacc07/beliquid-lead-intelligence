@@ -18,7 +18,7 @@ from urllib.parse import urljoin, urlparse
 from urllib.request import Request, build_opener
 import xml.etree.ElementTree as ET
 
-from beliquid.automated_research import USER_AGENT, _SafeRedirect, _public_http_url
+from beliquid.automated_research import USER_AGENT, _SafeRedirect, _public_http_url, _fetch_with_retries
 
 TIMEOUT_SECONDS = 8
 MAX_BYTES = 1_000_000
@@ -183,7 +183,7 @@ def _match_feed_payload(record: dict[str, Any], feed_url: str, feed: dict[str, A
 
 def research_feed(record: dict[str, Any], feed_url: str, observed_at: str, fetcher=fetch_feed) -> dict[str, Any]:
     try:
-        feed = fetcher(feed_url)
+        feed = _fetch_with_retries(feed_url, fetcher)
     except (HTTPError, URLError, TimeoutError, OSError, ValueError, ET.ParseError) as exc:
         return {
             "cache_version": TRIGGER_CACHE_VERSION,
@@ -272,7 +272,7 @@ def collect_trigger_research(prospect_payload: dict[str, Any], public_research: 
     def run_global(feed):
         url = feed["url"]
         try:
-            fetched = fetcher(url)
+            fetched = _fetch_with_retries(url, fetcher)
             return {
                 "cache_version": TRIGGER_CACHE_VERSION, "provider": feed.get("provider", "global news feed"),
                 "feed_url": url, "final_feed_url": fetched.get("feed_url") or url,
