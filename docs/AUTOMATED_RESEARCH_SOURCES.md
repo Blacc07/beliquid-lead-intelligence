@@ -33,7 +33,7 @@ The deterministic rules can confirm buying-trigger timing, growth/strategic pote
 - The research queue consumes the security output and routes a reported high-severity finding to an automated hold before commercial research.
 - The queue does not convert source results or the identity candidate-match score into canonical identity verification or a clean risk review.
 - Qualification still uses the existing six criteria and configured 60% evidence-coverage threshold. Candidate keywords and security flags do not automatically confirm criteria or generate a score.
-- Task completion is not qualification or clearance. Outreach remains disabled.
+- Task completion is not qualification or clearance. Outreach remains disabled. Durable state contains public evidence URLs and prospect identifiers only; never put credentials or secrets in the state issue.
 - The audit manifest records SHA-256 hashes of the research outputs, deterministic criterion assessment and generated review input. Hashes establish artifact integrity, not the truth of a source statement.
 
 ## Remaining limitations
