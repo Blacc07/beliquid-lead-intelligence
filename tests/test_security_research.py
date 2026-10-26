@@ -76,7 +76,8 @@ class SecurityResearchTests(unittest.TestCase):
         with patch("beliquid.security_research.time.sleep"):
             result = research_security({"project_name": "X", "chain": "base", "contract_address": "0xabc"},
                                        "2026-10-21T12:00:00Z", requester)
-        self.assertEqual(len(calls), 3)
+        self.assertEqual(sum("gopluslabs" in url for url in calls), 3)
+        self.assertEqual(len(calls), 4)  # three GoPlus attempts plus independent Honeypot.is request
         self.assertEqual(result["fetch_status"], "success")
 
     def test_solana_rugcheck_high_risk_report_is_concern(self):
