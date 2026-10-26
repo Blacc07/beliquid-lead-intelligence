@@ -124,6 +124,42 @@ class TaskLedgerTests(unittest.TestCase):
                          first["reviews"][key]["verify_identity_and_risk"]["input_fingerprint"])
         self.assertNotIn(key, returned["historical_reviews"])
 
+    def test_changed_prospect_fingerprint_reopens_tasks_with_fresh_evidence(self):
+        row = prospect("changed")
+        original_public = {"records": [{
+            "project_name": "changed", "chain": "ethereum", "contract_address": row["contract_address"],
+            "fetch_status": "success", "observed_at": STAMP,
+            "page": {"final_url": "https://changed.example/"},
+        }]}
+        first = build_task_ledger({"records": [row]}, original_public, {"records": []}, STAMP)
+        key = "ethereum:0xchanged"
+        old_task = first["reviews"][key]["verify_identity_and_risk"]
+        self.assertEqual(old_task["input_fingerprint"], __import__(
+            "beliquid.research_queue", fromlist=["record_fingerprint"]
+        ).record_fingerprint(row))
+
+        changed_row = prospect("changed", market_value=999.0)
+        changed_row["evidence"] = [{
+            "evidence_type": "token_market_enrichment",
+            "source_url": "https://dexscreener.com/token/changed?refresh=1",
+            "observed_at": "2026-10-22T12:00:00Z",
+        }]
+        refreshed_public = {"records": [{
+            "project_name": "changed", "chain": "ethereum", "contract_address": changed_row["contract_address"],
+            "fetch_status": "success", "observed_at": "2026-10-22T12:00:00Z",
+            "page": {"final_url": "https://changed.example/updated"},
+        }]}
+        second = build_task_ledger(
+            {"records": [changed_row]}, refreshed_public, {"records": []},
+            "2026-10-22T12:00:00Z", previous_payload=first,
+        )
+        new_task = second["reviews"][key]["verify_identity_and_risk"]
+        from beliquid.research_queue import record_fingerprint
+        self.assertNotEqual(old_task["input_fingerprint"], new_task["input_fingerprint"])
+        self.assertEqual(new_task["input_fingerprint"], record_fingerprint(changed_row))
+        self.assertEqual(new_task["evidence_urls"], ["https://changed.example/updated"])
+        self.assertEqual(new_task["completed_at"], "2026-10-22T12:00:00+00:00")
+
     def test_ledger_rejects_duplicate_source_records(self):
         row = prospect("delta")
         duplicate = {"records": [{"chain": "ethereum", "contract_address": row["contract_address"]}] * 2}

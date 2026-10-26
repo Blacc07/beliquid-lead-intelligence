@@ -101,7 +101,17 @@ def build_task_ledger(
         if key.startswith(":") or key.endswith(":"):
             raise ValueError("prospect record is missing chain or contract address")
         prior_tasks = all_previous_reviews.get(key, {})
-        tasks: dict[str, Any] = dict(prior_tasks) if isinstance(prior_tasks, dict) else {}
+        if not isinstance(prior_tasks, dict):
+            prior_tasks = {}
+        current_fingerprint = record_fingerprint(record)
+        # Reuse completions only for the exact prospect snapshot they researched.
+        # A changed market/evidence/identity input reopens tasks for fresh review.
+        tasks: dict[str, Any] = {
+            task_name: dict(task_data)
+            for task_name, task_data in prior_tasks.items()
+            if isinstance(task_data, dict)
+            and task_data.get("input_fingerprint") == current_fingerprint
+        }
 
         # Record identity/risk research as inconclusive only if at least one real
         # source response succeeded (including an explicit no-report response).
@@ -157,14 +167,10 @@ def build_task_ledger(
         normalized_key = str(old_key).strip().casefold()
         if normalized_key not in current_keys and isinstance(old_tasks, dict):
             historical_reviews[normalized_key] = dict(old_tasks)
-        elif normalized_key in current_keys and normalized_key not in ledger and isinstance(old_tasks, dict):
-            ledger[normalized_key] = dict(old_tasks)
     for old_key, old_tasks in previous_history.items():
         normalized_key = str(old_key).strip().casefold()
         if normalized_key not in current_keys and isinstance(old_tasks, dict):
             historical_reviews.setdefault(normalized_key, dict(old_tasks))
-        elif normalized_key in current_keys and normalized_key not in ledger and isinstance(old_tasks, dict):
-            ledger[normalized_key] = dict(old_tasks)
 
     return {
         "schema_version": 1,
