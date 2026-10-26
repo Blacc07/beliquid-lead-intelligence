@@ -81,15 +81,24 @@ def build_task_ledger(
     trigger_by_key = _source_record_map(trigger_research, "automated trigger research")
     now = completed_at or datetime.now(timezone.utc).isoformat()
     previous_reviews = previous_payload.get("reviews", {}) if isinstance(previous_payload, dict) else {}
+    previous_history = previous_payload.get("historical_reviews", {}) if isinstance(previous_payload, dict) else {}
     if not isinstance(previous_reviews, dict):
         previous_reviews = {}
+    if not isinstance(previous_history, dict):
+        previous_history = {}
+    all_previous_reviews = {**previous_history, **previous_reviews}
     current_keys = {_key(record) for record in records}
+    historical_reviews: dict[str, dict[str, Any]] = {
+        str(old_key).strip().casefold(): dict(old_tasks)
+        for old_key, old_tasks in previous_history.items()
+        if isinstance(old_tasks, dict)
+    }
     ledger: dict[str, dict[str, Any]] = {}
     for record in records:
         key = _key(record)
         if key.startswith(":") or key.endswith(":"):
             raise ValueError("prospect record is missing chain or contract address")
-        prior_tasks = previous_reviews.get(key, {})
+        prior_tasks = all_previous_reviews.get(key, {})
         tasks: dict[str, Any] = dict(prior_tasks) if isinstance(prior_tasks, dict) else {}
 
         # Record identity/risk research as inconclusive only if at least one real
@@ -136,12 +145,20 @@ def build_task_ledger(
         if tasks:
             ledger[key] = tasks
 
-    # Preserve completions for the same prospect key across runs. Queue generation
-    # compares each saved fingerprint to the current prospect snapshot, so stale work
-    # remains visible but cannot suppress a task after its inputs change.
+    # Preserve records outside the current discovery batch in durable history.
+    # They are not part of the active queue, but a later rediscovery can reuse the
+    # completion only if its fingerprint still matches the current prospect snapshot.
     for old_key, old_tasks in previous_reviews.items():
         normalized_key = str(old_key).strip().casefold()
-        if normalized_key in current_keys and normalized_key not in ledger and isinstance(old_tasks, dict):
+        if normalized_key not in current_keys and isinstance(old_tasks, dict):
+            historical_reviews[normalized_key] = dict(old_tasks)
+        elif normalized_key in current_keys and normalized_key not in ledger and isinstance(old_tasks, dict):
+            ledger[normalized_key] = dict(old_tasks)
+    for old_key, old_tasks in previous_history.items():
+        normalized_key = str(old_key).strip().casefold()
+        if normalized_key not in current_keys and isinstance(old_tasks, dict):
+            historical_reviews.setdefault(normalized_key, dict(old_tasks))
+        elif normalized_key in current_keys and normalized_key not in ledger and isinstance(old_tasks, dict):
             ledger[normalized_key] = dict(old_tasks)
 
     return {
@@ -162,6 +179,8 @@ def build_task_ledger(
             "outreach_enabled": False,
         },
         "reviews": ledger,
+        "historical_reviews": historical_reviews,
+        "historical_prospect_count": len(historical_reviews),
     }
 
 
