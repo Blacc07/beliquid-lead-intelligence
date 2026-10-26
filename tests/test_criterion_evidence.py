@@ -49,7 +49,7 @@ class CriterionEvidenceTests(unittest.TestCase):
         self.assertTrue(all(item["assessment_status"] == "unknown" for item in row["criteria"]))
         self.assertTrue(all(item["evidence_coverage_eligible"] is False for item in row["criteria"]))
         self.assertEqual(row["qualification_score"], None)
-        self.assertEqual(row["score_status"], "withheld")
+        self.assertEqual(row["score_status"], "insufficient_evidence")
         self.assertEqual(result["records_with_scores"], 0)
         trigger_row = next(item for item in row["criteria"] if item["key"] == "buying_trigger_and_timing")
         self.assertEqual(trigger_row["candidate_evidence_count"], 1)
