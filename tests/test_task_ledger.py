@@ -124,6 +124,21 @@ class TaskLedgerTests(unittest.TestCase):
                          first["reviews"][key]["verify_identity_and_risk"]["input_fingerprint"])
         self.assertNotIn(key, returned["historical_reviews"])
 
+    def test_changed_prospect_fingerprint_reopens_prior_tasks(self):
+        row = prospect("changed")
+        public = {"records": [{
+            "project_name": "changed", "chain": "ethereum", "contract_address": row["contract_address"],
+            "fetch_status": "success", "observed_at": STAMP,
+            "page": {"final_url": "https://changed.example/"},
+        }]}
+        first = build_task_ledger({"records": [row]}, public, {"records": []}, STAMP)
+        changed_row = prospect("changed", market_value=999.0)
+        second = build_task_ledger(
+            {"records": [changed_row]}, {"records": []}, {"records": []},
+            "2026-10-22T12:00:00Z", previous_payload=first,
+        )
+        self.assertNotIn("ethereum:0xchanged", second["reviews"])
+
     def test_ledger_rejects_duplicate_source_records(self):
         row = prospect("delta")
         duplicate = {"records": [{"chain": "ethereum", "contract_address": row["contract_address"]}] * 2}
