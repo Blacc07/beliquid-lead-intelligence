@@ -94,7 +94,7 @@ jobs:
       - name: Record completed automated research passes
         env:
           PYTHONPATH: src
-        run: python -m beliquid.task_ledger --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --output artifacts/research-task-ledger.json
+        run: python -m beliquid.task_ledger --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --previous .cache/research-state/research-task-ledger.json --output artifacts/research-task-ledger.json
 
       - name: Generate automated research queue
         env:
