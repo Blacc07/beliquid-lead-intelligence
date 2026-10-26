@@ -143,6 +143,28 @@ class SecurityResearchTests(unittest.TestCase):
         self.assertTrue(current["records"][0]["historical_concern_retained"])
         self.assertEqual(current["records"][0]["criterion_evidence_candidate"]["source_scoped_risk_status"], "concern")
 
+    def test_historical_secondary_provider_concern_keeps_finding_provenance(self):
+        row = {"project_name": "Token", "chain": "base", "contract_address": "0xabc"}
+        previous = collect_security({"records": [row]}, "2026-10-20T10:00:00Z",
+                                    lambda url: {"code": 1, "result": {"0xabc": {"is_honeypot": "0"}}})
+        prior = previous["records"][0]
+        prior["risk_status"] = "concern"
+        prior["independent_sources"] = [
+            {"provider": "GoPlus Token Security API", "provider_url": "https://api.gopluslabs.io/report",
+             "observed_at": "2026-10-20T10:00:00Z", "risk_status": "no_high_risk_flag_detected_by_provider", "findings": []},
+            {"provider": "Honeypot.is token simulation", "provider_url": "https://api.honeypot.is/report",
+             "observed_at": "2026-10-20T10:00:00Z", "risk_status": "concern",
+             "findings": [{"field": "isHoneypot", "severity": "high", "value": "true"}]},
+        ]
+        current = collect_security({"records": [row]}, "2026-10-21T12:00:00Z",
+                                   lambda url: {"code": 1, "result": {"0xabc": {"is_honeypot": "0"}}},
+                                   previous_payload=previous, cache_ttl_hours=0)
+        record = current["records"][0]
+        self.assertTrue(record["historical_concern_retained"])
+        self.assertIn("isHoneypot", {item.get("field") for item in record["findings"]})
+        self.assertTrue(any(item.get("provider") == "Honeypot.is token simulation"
+                            for item in record["historical_concern_sources"]))
+
     def test_explicit_canonical_clearance_forces_fresh_check_of_cached_concern(self):
         row = {"project_name": "SolanaToken", "chain": "solana", "contract_address": "So111",
                "identity_risk": {"identity_status": "verified", "risk_status": "clear"}}
