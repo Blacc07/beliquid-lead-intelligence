@@ -143,7 +143,7 @@ def assess_criterion_reviews(prospect_payload: dict[str, Any], trigger_payload: 
             if status != "unknown":
                 criterion_reviews[criterion_key] = {
                     "status": status, "evidence_urls": urls, "evidence_timestamps": timestamps,
-                    "note": note, "review_flag": None, "assessment_method": rule_id,
+                    "note": note, "review_flag": None,
                 }
             assessed.append({"key": criterion_key, "weight": criterion.get("weight"), "status": status,
                              "evidence_urls": urls, "evidence_timestamps": timestamps,
