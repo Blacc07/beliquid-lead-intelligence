@@ -2,6 +2,15 @@ name: BeLiquid Pipeline Health Check
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'config/**'
+      - 'docs/**'
+      - 'README.md'
+      - '.github/workflows/health-check.yml'
   push:
     branches: [main]
     paths:
@@ -16,6 +25,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 concurrency:
   group: beliquid-pipeline-health-check
@@ -25,7 +35,7 @@ jobs:
   health-check:
     name: Validate Python pipeline
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -35,6 +45,62 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Restore recent research state cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/research-state
+          key: beliquid-research-state-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            beliquid-research-state-${{ github.ref_name }}-
+
+      - name: Restore durable task ledger from repository issue
+        id: restore-ledger
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = '.cache/research-state/research-task-ledger.json';
+            const title = '[automation-state] BeLiquid research task ledger';
+            const start = '<!-- beliquid-task-ledger:start -->';
+            const end = '<!-- beliquid-task-ledger:end -->';
+            let response;
+            try {
+              response = await github.rest.issues.listForRepo({
+                owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
+              });
+            } catch (error) {
+              core.warning(`Could not read durable ledger issue; retaining cache state: ${error.message}`);
+              response = { data: [], readFailed: true };
+            }
+            const issue = response.data.find(item => !item.pull_request && item.title === title);
+            if (issue) {
+              const body = issue.body || '';
+              const a = body.indexOf(start);
+              const b = body.indexOf(end);
+              if (a >= 0 && b > a) {
+                try {
+                  const ledger = JSON.parse(body.slice(a + start.length, b).trim());
+                  if (ledger && typeof ledger === 'object' && ledger.schema_version === 1 && ledger.reviews && typeof ledger.reviews === 'object') {
+                    fs.mkdirSync('.cache/research-state', { recursive: true });
+                    fs.writeFileSync(path, JSON.stringify(ledger, null, 2) + '\n');
+                    core.info(`Restored durable research ledger from issue #${issue.number}; active=${Object.keys(ledger.reviews).length}, historical=${Object.keys(ledger.historical_reviews || {}).length}`);
+                  } else {
+                    core.warning('Durable issue ledger had an unexpected schema; retaining cache state.');
+                  }
+                } catch (error) {
+                  core.warning(`Could not parse durable issue ledger; retaining cache state: ${error.message}`);
+                }
+              } else {
+                core.warning('Durable issue exists but has no ledger markers; retaining cache state.');
+              }
+            } else if (response.readFailed) {
+              core.info('Durable ledger issue lookup failed; issue absence is unknown; retaining cache state.');
+            } else {
+              core.info('No durable ledger issue exists yet; using the branch cache until the first trusted-run persistence step.');
+            }
+            const ledgerIssueFound = Boolean(response && response.data.some(item => !item.pull_request && item.title === title));
+            core.setOutput('restore_status', response.readFailed ? 'read_failed' : (ledgerIssueFound ? 'issue_found' : 'missing'));
 
       - name: Verify Python version
         run: python --version
@@ -54,6 +120,52 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.main
 
+      - name: Collect automated public-page evidence candidates
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.automated_research --input artifacts/prospect-review.json --output artifacts/automated-research.json --previous .cache/research-state/automated-research.json --cache-ttl-hours 24
+
+      - name: Cross-check project identity against chain-explorer metadata
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.identity_crosscheck --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --output artifacts/identity-crosscheck.json
+
+      - name: Collect automated contract-risk observations
+        env:
+          PYTHONPATH: src
+          GOPLUS_ACCESS_TOKEN: ${{ secrets.GOPLUS_ACCESS_TOKEN }}
+        run: python -m beliquid.security_research --input artifacts/prospect-review.json --output artifacts/security-research.json --previous .cache/research-state/security-research.json --cache-ttl-hours 24
+
+      - name: Discover dated buying-trigger candidates from project feeds
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.trigger_research --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --output artifacts/trigger-research.json --previous .cache/research-state/trigger-research.json --cache-ttl-hours 24
+
+      - name: Assess criteria from corroborated dated news evidence
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.automated_criterion_assessment --input artifacts/prospect-review.json --triggers artifacts/trigger-research.json --identity-crosscheck artifacts/identity-crosscheck.json --criteria config/qualification_criteria.json --output artifacts/automated-criterion-assessment.json --reviews-output artifacts/automated-criterion-reviews.json
+
+      - name: Rebuild final prospect exports with deterministic assessments
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.rebuild_review_export --input artifacts/prospect-review.json --summary artifacts/pipeline-summary.json --output-dir artifacts --criterion-reviews artifacts/automated-criterion-reviews.json
+
+      - name: Aggregate evidence candidates against the six qualification criteria
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.criterion_evidence --input artifacts/prospect-review.json --criteria config/qualification_criteria.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --output artifacts/criterion-evidence.json
+
+      - name: Record completed automated research passes
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.task_ledger --input artifacts/prospect-review.json --public-research artifacts/automated-research.json --security-research artifacts/security-research.json --trigger-research artifacts/trigger-research.json --identity-crosscheck artifacts/identity-crosscheck.json --previous .cache/research-state/research-task-ledger.json --output artifacts/research-task-ledger.json
+
+      - name: Generate automated research queue
+        env:
+          PYTHONPATH: src
+        run: python -m beliquid.research_queue --input artifacts/prospect-review.json --output-dir artifacts --reviews artifacts/research-task-ledger.json --security-research artifacts/security-research.json
+
       - name: Validate review inputs, CSV/JSON parity, and audit provenance
         env:
           PYTHONPATH: src
@@ -64,6 +176,41 @@ jobs:
           PYTHONPATH: src
         run: python -m beliquid.pilot_validation --artifacts-dir artifacts
 
+      - name: Send generated lead digest to Telegram DM
+        if: success() && github.event_name != 'pull_request'
+        env:
+          PYTHONPATH: src
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set +e
+          python -m beliquid.telegram_digest --input artifacts/prospect-review.json
+          result=$?
+          if [ "$result" -eq 2 ]; then
+            echo "- Telegram delivery: skipped; configure TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID repository secrets." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "$result" -eq 0 ]; then
+            echo "- Telegram delivery: digest sent successfully." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$result"
+
+      - name: Stage recent research state for the next run
+        if: always()
+        run: |
+          mkdir -p .cache/research-state
+          for name in automated-research.json security-research.json trigger-research.json research-task-ledger.json; do
+            if [ -f "artifacts/$name" ]; then cp "artifacts/$name" ".cache/research-state/$name"; fi
+          done
+
+      - name: Save recent research state cache
+        if: always() && hashFiles('.cache/research-state/*.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/research-state
+          key: beliquid-research-state-${{ github.ref_name }}-${{ github.run_id }}
+
       - name: Upload complete prospect review files
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,12 +220,70 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  persist-research-state:
+    name: Persist durable task ledger
+    needs: health-check
+    if: success() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Download this run's research artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: beliquid-prospect-review-${{ github.run_number }}
+          path: artifacts
+
+      - name: Persist task ledger in repository issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const ledger = JSON.parse(fs.readFileSync('artifacts/research-task-ledger.json', 'utf8'));
+            if (!ledger || ledger.schema_version !== 1 || !ledger.reviews || typeof ledger.reviews !== 'object') {
+              throw new Error('Task ledger artifact has an invalid schema; refusing to persist.');
+            }
+            const start = '<!-- beliquid-task-ledger:start -->';
+            const end = '<!-- beliquid-task-ledger:end -->';
+            const title = '[automation-state] BeLiquid research task ledger';
+            const snapshot = JSON.stringify(ledger, null, 2);
+            const body = [
+              'Durable, machine-readable task state for the BeLiquid Lead Intelligence pipeline.',
+              '',
+              'This issue body is updated by successful trusted GitHub Actions runs. Research completion records mean the source task ran; they do not mean identity is verified, risk is clear, or a prospect is qualified.',
+              '',
+              `Last persisted run: ${context.runId} (run #${context.runNumber})`,
+              `Active prospects: ${Object.keys(ledger.reviews).length}; historical prospects: ${Object.keys(ledger.historical_reviews || {}).length}`,
+              '',
+              start,
+              snapshot,
+              end,
+              '',
+              'Do not add credentials or secrets to this issue.'
+            ].join('\n');
+            if (body.length > 60000) {
+              throw new Error(`Ledger body is too large for safe issue persistence (${body.length} characters).`);
+            }
+            const response = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo, state: 'open', per_page: 100
+            });
+            const issue = response.data.find(item => !item.pull_request && item.title === title);
+            if (issue) {
+              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number, body });
+              core.info(`Updated durable task ledger issue #${issue.number}.`);
+            } else {
+              const created = await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body });
+              core.info(`Created durable task ledger issue #${created.data.number}.`);
+            }
+
       - name: Record run summary
         if: always()
         env:
           JOB_STATUS: ${{ job.status }}
           RUN_NUMBER: ${{ github.run_number }}
           EVENT_NAME: ${{ github.event_name }}
+          DURABLE_RESTORE_STATUS: ${{ steps.restore-ledger.outputs.restore_status }}
         run: |
           {
             echo "## BeLiquid Pipeline Health Check"
@@ -86,13 +291,15 @@ jobs:
             echo "- Run number: ${RUN_NUMBER}"
             echo "- Trigger: ${EVENT_NAME}"
             echo "- Job status: ${JOB_STATUS}"
+            echo "- Durable ledger lookup status: ${DURABLE_RESTORE_STATUS:-not-reported} (lookup status is not proof of a successful write-and-restore test)"
             echo "- Python: 3.12"
             echo "- Discovery source: DEX Screener latest token profiles"
             echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
             echo "- Runtime health check: validates Python runtime only; its zero discovery counts are not batch totals"
-            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
-            echo "- Review validation: checks reviewer inputs against the current batch, reconciles CSV/JSON fields, and records input/output SHA-256 hashes"
+            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, automated-research.json, identity-crosscheck.json, security-research.json, trigger-research.json, automated-criterion-assessment.json, automated-criterion-reviews.json, criterion-evidence.json, research-task-ledger.json, pilot-validation.csv, pilot-validation.json, pilot-validation.md, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
+            echo "- Review validation: checks inputs against the current batch, reconciles CSV/JSON fields, and records input/output SHA-256 hashes"
+            echo "- Research queue: no mandatory human review; unresolved identity/risk excluded from cleared list; documented concerns remain held"
             echo "- Market research priority: heuristic labels only; not a qualification score or buying-intent claim"
-            echo "- Qualification scores: withheld until criterion-level evidence is reviewed"
+            echo "- Qualification scores: withheld until criterion-level evidence coverage meets the existing threshold"
             echo "- Automated outreach: disabled"
           } >> "$GITHUB_STEP_SUMMARY"

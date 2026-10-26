@@ -9,6 +9,7 @@ import unittest
 
 from beliquid.models import ProspectRecord
 from beliquid.review_export import write_review_exports
+from beliquid.research_queue import write_research_queue
 from beliquid.validate_review_batch import validate_batch, write_audit_manifest
 
 URL = "https://evidence.example/review"
@@ -30,7 +31,8 @@ class ValidateReviewBatchTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.config_dir = self.root / "config"
         self.config_dir.mkdir()
-        shutil.copy(REPO_ROOT / "config" / "qualification_criteria.json", self.config_dir / "qualification_criteria.json")
+        for config_name in ("qualification_criteria.json", "research_task_reviews.json"):
+            shutil.copy(REPO_ROOT / "config" / config_name, self.config_dir / config_name)
         self.artifacts = self.root / "artifacts"
         self.artifacts.mkdir()
         self.records = [
@@ -109,6 +111,12 @@ class ValidateReviewBatchTests(unittest.TestCase):
             self.config_dir / "buying_trigger_reviews.json",
             self.config_dir / "criterion_reviews.json",
         )
+        write_research_queue(self.artifacts / "prospect-review.json", self.artifacts, self.config_dir / "research_task_reviews.json")
+        (self.artifacts / "automated-research.json").write_text(json.dumps({"schema_version": 1, "records": [], "outreach_enabled": False}), encoding="utf-8")
+        (self.artifacts / "security-research.json").write_text(json.dumps({"schema_version": 1, "records": [], "outreach_enabled": False}), encoding="utf-8")
+        (self.artifacts / "trigger-research.json").write_text(json.dumps({"schema_version": 1, "records": [], "outreach_enabled": False}), encoding="utf-8")
+        (self.artifacts / "criterion-evidence.json").write_text(json.dumps({"schema_version": 1, "records": [], "outreach_enabled": False}), encoding="utf-8")
+        (self.artifacts / "research-task-ledger.json").write_text(json.dumps({"schema_version": 1, "reviews": {}}), encoding="utf-8")
 
     def test_validates_threshold_boundary_holds_trigger_separation_and_parity(self):
         result = validate_batch(self.artifacts, self.root)
@@ -165,6 +173,9 @@ class ValidateReviewBatchTests(unittest.TestCase):
             validate_batch(self.artifacts, self.root)
 
     def test_audit_manifest_records_run_context_and_hashes(self):
+        (self.artifacts / "identity-crosscheck.json").write_text(json.dumps({"records": []}), encoding="utf-8")
+        (self.artifacts / "automated-criterion-assessment.json").write_text(json.dumps({"records": []}), encoding="utf-8")
+        (self.artifacts / "automated-criterion-reviews.json").write_text(json.dumps({"reviews": {}}), encoding="utf-8")
         result = validate_batch(self.artifacts, self.root)
         old = dict(os.environ)
         try:
@@ -179,7 +190,16 @@ class ValidateReviewBatchTests(unittest.TestCase):
         self.assertEqual(manifest["workflow"]["commit_sha"], "test-sha")
         self.assertIn("config/criterion_reviews.json", manifest["review_input_sha256"])
         self.assertIn("prospect-review.json", manifest["export_sha256"])
+        self.assertIn("automated-research.json", manifest["export_sha256"])
+        self.assertIn("security-research.json", manifest["export_sha256"])
+        self.assertIn("trigger-research.json", manifest["export_sha256"])
+        self.assertIn("criterion-evidence.json", manifest["export_sha256"])
+        self.assertIn("research-task-ledger.json", manifest["export_sha256"])
+        self.assertIn("identity-crosscheck.json", manifest["export_sha256"])
+        self.assertIn("automated-criterion-assessment.json", manifest["export_sha256"])
+        self.assertIn("automated-criterion-reviews.json", manifest["export_sha256"])
         self.assertFalse(manifest["validation"]["outreach_enabled"])
+
 
 
 if __name__ == "__main__":
