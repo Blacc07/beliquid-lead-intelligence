@@ -101,14 +101,15 @@ def build_task_ledger(
         if key.startswith(":") or key.endswith(":"):
             raise ValueError("prospect record is missing chain or contract address")
         prior_tasks = all_previous_reviews.get(key, {})
+        if not isinstance(prior_tasks, dict):
+            prior_tasks = {}
         current_fingerprint = record_fingerprint(record)
         # Reuse completions only for the exact prospect snapshot they researched.
         # A changed market/evidence/identity input reopens tasks for fresh review.
         tasks: dict[str, Any] = {
             task_name: dict(task_data)
             for task_name, task_data in prior_tasks.items()
-            if isinstance(prior_tasks, dict)
-            and isinstance(task_data, dict)
+            if isinstance(task_data, dict)
             and task_data.get("input_fingerprint") == current_fingerprint
         }
 
