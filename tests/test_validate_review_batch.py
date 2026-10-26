@@ -173,6 +173,7 @@ class ValidateReviewBatchTests(unittest.TestCase):
             validate_batch(self.artifacts, self.root)
 
     def test_audit_manifest_records_run_context_and_hashes(self):
+        (self.artifacts / "identity-crosscheck.json").write_text(json.dumps({"records": []}), encoding="utf-8")
         (self.artifacts / "automated-criterion-assessment.json").write_text(json.dumps({"records": []}), encoding="utf-8")
         (self.artifacts / "automated-criterion-reviews.json").write_text(json.dumps({"reviews": {}}), encoding="utf-8")
         result = validate_batch(self.artifacts, self.root)
@@ -194,6 +195,7 @@ class ValidateReviewBatchTests(unittest.TestCase):
         self.assertIn("trigger-research.json", manifest["export_sha256"])
         self.assertIn("criterion-evidence.json", manifest["export_sha256"])
         self.assertIn("research-task-ledger.json", manifest["export_sha256"])
+        self.assertIn("identity-crosscheck.json", manifest["export_sha256"])
         self.assertIn("automated-criterion-assessment.json", manifest["export_sha256"])
         self.assertIn("automated-criterion-reviews.json", manifest["export_sha256"])
         self.assertFalse(manifest["validation"]["outreach_enabled"])
