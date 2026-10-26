@@ -163,7 +163,7 @@ jobs:
             echo "- Discovery source: DEX Screener latest token profiles"
             echo "- Discovery/enrichment/qualification summary: emitted by the source step above"
             echo "- Runtime health check: validates Python runtime only; its zero discovery counts are not batch totals"
-            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, automated-research.json, security-research.json, trigger-research.json, criterion-evidence.json, research-task-ledger.json, pilot-validation.csv, pilot-validation.json, pilot-validation.md, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
+            echo "- Full-batch review export: prospect-review.csv, prospect-review.json, research-queue.csv, research-queue.json, automated-research.json, security-research.json, trigger-research.json, automated-criterion-assessment.json, automated-criterion-reviews.json, criterion-evidence.json, research-task-ledger.json, pilot-validation.csv, pilot-validation.json, pilot-validation.md, pipeline-summary.json, audit-manifest.json (artifact retention: 14 days)"
             echo "- Review validation: checks inputs against the current batch, reconciles CSV/JSON fields, and records input/output SHA-256 hashes"
             echo "- Research queue: no mandatory human review; unresolved identity/risk excluded from cleared list; documented concerns remain held"
             echo "- Market research priority: heuristic labels only; not a qualification score or buying-intent claim"
