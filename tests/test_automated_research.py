@@ -1,5 +1,6 @@
 """Offline tests for automated public-page evidence candidate collection."""
 import unittest
+from unittest.mock import patch
 from beliquid.automated_research import collect_research, research_record, _public_http_url
 
 
@@ -36,12 +37,38 @@ class AutomatedResearchTests(unittest.TestCase):
         self.assertFalse(result["outreach_enabled"])
 
     def test_failed_fetch_is_auditable_and_does_not_clear_risk(self):
+        calls = []
         def fail(url):
+            calls.append(url)
             raise TimeoutError("slow")
-        result = research_record({"project_name": "Token", "chain": "base", "contract_address": "0xabc", "website_url_candidate": "https://example.org"}, "2026-10-21T12:00:00Z", fail)
+        with patch("beliquid.automated_research.time.sleep"):
+            result = research_record({"project_name": "Token", "chain": "base", "contract_address": "0xabc", "website_url_candidate": "https://example.org"}, "2026-10-21T12:00:00Z", fail)
         self.assertEqual(result["fetch_status"], "fetch_failed")
+        self.assertEqual(len(calls), 3)
         self.assertEqual(result["identity_status"], "unknown")
         self.assertEqual(result["risk_status"], "unknown")
+
+    def test_transient_public_page_failure_retries_then_succeeds(self):
+        calls = []
+        page = {"final_url": "https://example.org/", "page_title": "Example", "text_excerpt": "Example", "links": [], "feed_links": []}
+        def flaky(url):
+            calls.append(url)
+            if len(calls) < 3:
+                raise TimeoutError("temporary")
+            return page
+        with patch("beliquid.automated_research.time.sleep"):
+            result = research_record({"project_name": "Token", "chain": "base", "contract_address": "0xabc", "website_url_candidate": "https://example.org"}, "2026-10-21T12:00:00Z", flaky)
+        self.assertEqual(result["fetch_status"], "success")
+        self.assertEqual(len(calls), 3)
+
+    def test_invalid_page_response_is_not_retried(self):
+        calls = []
+        def invalid(url):
+            calls.append(url)
+            raise ValueError("not HTML")
+        result = research_record({"project_name": "Token", "chain": "base", "contract_address": "0xabc", "website_url_candidate": "https://example.org"}, "2026-10-21T12:00:00Z", invalid)
+        self.assertEqual(result["fetch_status"], "fetch_failed")
+        self.assertEqual(len(calls), 1)
 
     def test_page_text_generates_candidates_not_qualification_findings(self):
         page = {"final_url": "https://example.org/", "page_title": "Example", "meta_description": "Token",
