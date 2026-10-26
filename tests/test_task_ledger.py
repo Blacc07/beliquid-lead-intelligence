@@ -105,6 +105,25 @@ class TaskLedgerTests(unittest.TestCase):
         self.assertEqual(tasks["verify_identity_and_risk"]["input_fingerprint"],
                          first["reviews"]["ethereum:0xpersist"]["verify_identity_and_risk"]["input_fingerprint"])
 
+    def test_task_history_survives_batch_absence_and_can_be_reused(self):
+        row = prospect("history")
+        public = {"records": [{"project_name": "history", "chain": "ethereum",
+            "contract_address": row["contract_address"], "fetch_status": "success",
+            "observed_at": STAMP, "page": {"final_url": "https://history.example/"}}]}
+        security = {"records": []}
+        first = build_task_ledger({"records": [row]}, public, security, STAMP)
+        absent = build_task_ledger({"records": []}, {"records": []}, {"records": []},
+                                   "2026-10-22T12:00:00Z", previous_payload=first)
+        key = "ethereum:0xhistory"
+        self.assertNotIn(key, absent["reviews"])
+        self.assertIn(key, absent["historical_reviews"])
+        returned = build_task_ledger({"records": [row]}, {"records": []}, {"records": []},
+                                     "2026-10-23T12:00:00Z", previous_payload=absent)
+        self.assertIn(key, returned["reviews"])
+        self.assertEqual(returned["reviews"][key]["verify_identity_and_risk"]["input_fingerprint"],
+                         first["reviews"][key]["verify_identity_and_risk"]["input_fingerprint"])
+        self.assertNotIn(key, returned["historical_reviews"])
+
     def test_ledger_rejects_duplicate_source_records(self):
         row = prospect("delta")
         duplicate = {"records": [{"chain": "ethereum", "contract_address": row["contract_address"]}] * 2}
